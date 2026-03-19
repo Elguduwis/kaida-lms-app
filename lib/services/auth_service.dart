@@ -9,17 +9,14 @@ class AuthService {
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.login),
-        body: {
-          'email': email,
-          'password': password,
-        },
+        body: {'email': email, 'password': password},
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
           final user = UserModel.fromJson(data);
-          await _saveUserToken(user.token);
+          await _saveUserData(user.token, user.id);
           return {'success': true, 'message': 'Login successful'};
         } else {
           return {'success': false, 'message': data['message'] ?? 'Login failed'};
@@ -31,8 +28,9 @@ class AuthService {
     }
   }
 
-  Future<void> _saveUserToken(String token) async {
+  Future<void> _saveUserData(String token, int userId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
+    await prefs.setInt('user_id', userId);
   }
 }
