@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import '../config/app_theme.dart';
 import '../models/course_detail_model.dart';
 import '../services/course_player_service.dart';
@@ -19,7 +20,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   bool _isLoading = true;
   List<SectionModel> _sections = [];
   LessonModel? _currentLesson;
+  
   VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+
+  // Flatten the lessons list to easily find previous/next
+  List<LessonModel> get _allLessons => _sections.expand((s) => s.lessons).toList();
 
   @override
   void initState() {
@@ -37,10 +43,9 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
         _playLesson(_sections.first.lessons.first);
       }
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
-  // SMART DETECTION: Check the actual URL text, not the database label
   bool _isYoutubeOrVimeo(String url) {
     String lowerUrl = url.toLowerCase();
     return lowerUrl.contains('youtube.com') || 
@@ -48,38 +53,79 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
            lowerUrl.contains('vimeo.com');
   }
 
-  void _playLesson(LessonModel lesson) {
-    setState(() => _currentLesson = lesson);
-    
-    if (_videoController != null) {
-      _videoController!.dispose();
-      _videoController = null;
-    }
+  void _playLesson(LessonModel lesson) async {
+    setState(() {
+      _currentLesson = lesson;
+      // Clean up old players before starting a new one
+      if (_chewieController != null) {
+        _chewieController!.dispose();
+        _chewieController = null;
+      }
+      if (_videoController != null) {
+        _videoController!.dispose();
+        _videoController = null;
+      }
+    });
 
     if (lesson.contentType == 'video' && lesson.content.isNotEmpty) {
       String url = lesson.content;
       
-      // If it is NOT a YouTube/Vimeo link, attempt native playback
       if (!_isYoutubeOrVimeo(url)) {
         if (!url.startsWith('http')) {
           url = 'https://academy.kainuwa.africa/' + url;
         }
         
-        _videoController = VideoPlayerController.network(url)
-          ..initialize().then((_) {
-            if (mounted) {
-                setState(() {});
-                _videoController!.play();
-            }
-          }).catchError((error) {
-             print("Playback error: $error");
-          });
+        _videoController = VideoPlayerController.network(url);
+        await _videoController!.initialize();
+
+        _chewieController = ChewieController(
+          videoPlayerController: _videoController!,
+          autoPlay: true,
+          looping: false,
+          allowPlaybackSpeedChanging: true,
+          allowMuting: true,
+          materialProgressColors: ChewieProgressColors(
+            playedColor: AppTheme.primaryColor,
+            handleColor: AppTheme.primaryColor,
+            backgroundColor: Colors.grey.shade800,
+            bufferedColor: Colors.grey.shade400,
+          ),
+        );
+
+        // Auto-Next Logic
+        _videoController!.addListener(() {
+          if (_videoController!.value.isInitialized &&
+              !_videoController!.value.isPlaying &&
+              _videoController!.value.position >= _videoController!.value.duration && 
+              _videoController!.value.position > Duration.zero) {
+            _playNextLesson();
+          }
+        });
+
+        if (mounted) setState(() {});
       }
+    }
+  }
+
+  void _playNextLesson() {
+    if (_currentLesson == null) return;
+    final currentIndex = _allLessons.indexOf(_currentLesson!);
+    if (currentIndex >= 0 && currentIndex < _allLessons.length - 1) {
+      _playLesson(_allLessons[currentIndex + 1]);
+    }
+  }
+
+  void _playPrevLesson() {
+    if (_currentLesson == null) return;
+    final currentIndex = _allLessons.indexOf(_currentLesson!);
+    if (currentIndex > 0) {
+      _playLesson(_allLessons[currentIndex - 1]);
     }
   }
 
   @override
   void dispose() {
+    _chewieController?.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -121,6 +167,34 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                 ),
                 
                 const Divider(height: 1, thickness: 1),
+
+                // Next / Prev Navigation Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  color: Colors.white,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        icon: Icon(Icons.skip_previous, color: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) > 0) ? AppTheme.primaryColor : Colors.grey),
+                        label: Text('Previous', style: TextStyle(color: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) > 0) ? AppTheme.primaryColor : Colors.grey, fontWeight: FontWeight.bold)),
+                        onPressed: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) > 0) ? _playPrevLesson : null,
+                      ),
+                      TextButton(
+                        onPressed: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) < _allLessons.length - 1) ? _playNextLesson : null,
+                        child: Row(
+                          children: [
+                            Text('Next', style: TextStyle(color: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) < _allLessons.length - 1) ? AppTheme.primaryColor : Colors.grey, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            Icon(Icons.skip_next, color: (_currentLesson != null && _allLessons.indexOf(_currentLesson!) < _allLessons.length - 1) ? AppTheme.primaryColor : Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const Divider(height: 1, thickness: 1),
                 
                 // Bottom: Curriculum List
                 Expanded(
@@ -129,7 +203,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                     itemBuilder: (context, index) {
                       final section = _sections[index];
                       return ExpansionTile(
-                        initiallyExpanded: index == 0,
+                        initiallyExpanded: _currentLesson != null ? section.lessons.any((l) => l.id == _currentLesson!.id) : index == 0,
                         title: Text(section.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         children: section.lessons.map((lesson) {
                           final isPlaying = _currentLesson?.id == lesson.id;
@@ -173,30 +247,8 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
         );
       }
       
-      if (_videoController != null && _videoController!.value.isInitialized) {
-        return AspectRatio(
-          aspectRatio: _videoController!.value.aspectRatio,
-          child: Stack(
-            alignment: Alignment.bottomCenter,
-            children: [
-              VideoPlayer(_videoController!),
-              VideoProgressIndicator(_videoController!, allowScrubbing: true, colors: VideoProgressColors(playedColor: AppTheme.primaryColor)),
-              Align(
-                alignment: Alignment.center,
-                child: IconButton(
-                  iconSize: 50,
-                  color: Colors.white.withOpacity(0.9),
-                  icon: Icon(_videoController!.value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill),
-                  onPressed: () {
-                    setState(() {
-                      _videoController!.value.isPlaying ? _videoController!.pause() : _videoController!.play();
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
+      if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
+        return Chewie(controller: _chewieController!);
       }
       
       if (_videoController != null && _videoController!.value.hasError) {
