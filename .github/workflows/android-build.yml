@@ -26,6 +26,10 @@ jobs:
     - name: Generate Platform Folders
       run: flutter create --platforms=android .
         
+    - name: Add Internet Permission
+      run: |
+        sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+        
     - name: Install dependencies
       run: flutter pub get
       
