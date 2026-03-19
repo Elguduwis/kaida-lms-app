@@ -51,10 +51,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         future: _myCoursesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
           } else if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(
-              child: Text('You are not enrolled in any courses yet.'),
+              child: Text('You are not enrolled in any courses yet.', style: TextStyle(fontSize: 16)),
             );
           }
 
@@ -66,31 +66,96 @@ class _DashboardScreenState extends State<DashboardScreen> {
             itemBuilder: (context, index) {
               final course = courses[index];
               return Card(
-                elevation: 2,
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: const Icon(Icons.play_circle_fill, size: 40, color: AppTheme.primaryColor),
-                  title: Text(
-                    course.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Column(
+                elevation: 3,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                clipBehavior: Clip.antiAlias,
+                margin: const EdgeInsets.only(bottom: 20),
+                child: InkWell(
+                  onTap: () {
+                    // TODO: Open Video Player
+                  },
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: course.progress / 100,
-                        backgroundColor: Colors.grey[300],
-                        color: Colors.green,
+                      // Course Image
+                      course.thumbnailUrl.isNotEmpty
+                          ? Image.network(
+                              course.thumbnailUrl,
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                height: 180,
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                              ),
+                            )
+                          : Container(
+                              height: 180,
+                              color: AppTheme.primaryColor,
+                              child: const Icon(Icons.school, size: 60, color: Colors.white),
+                            ),
+                      
+                      // Course Details
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              course.title,
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'By ${course.instructorName}',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Progress Bar
+                            LinearProgressIndicator(
+                              value: course.progress / 100,
+                              backgroundColor: Colors.grey[200],
+                              color: AppTheme.primaryColor,
+                              minHeight: 8,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '${course.progress}% Complete',
+                                style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // Action Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: () {
+                                  // TODO: Navigate to player
+                                },
+                                child: Text(
+                                  course.progress > 0 ? 'Continue Course' : 'Start Course',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text('${course.progress}% Completed'),
                     ],
                   ),
-                  onTap: () {
-                    // TODO: Navigate to Course Player Screen
-                  },
                 ),
               );
             },
