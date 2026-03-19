@@ -40,6 +40,14 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     setState(() => _isLoading = false);
   }
 
+  // SMART DETECTION: Check the actual URL text, not the database label
+  bool _isYoutubeOrVimeo(String url) {
+    String lowerUrl = url.toLowerCase();
+    return lowerUrl.contains('youtube.com') || 
+           lowerUrl.contains('youtu.be') || 
+           lowerUrl.contains('vimeo.com');
+  }
+
   void _playLesson(LessonModel lesson) {
     setState(() => _currentLesson = lesson);
     
@@ -48,16 +56,25 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
       _videoController = null;
     }
 
-    if (lesson.contentType == 'video' && lesson.videoSource == 'mp4' && lesson.content.isNotEmpty) {
+    if (lesson.contentType == 'video' && lesson.content.isNotEmpty) {
       String url = lesson.content;
-      if (!url.startsWith('http')) {
-        url = 'https://academy.kainuwa.africa/' + url;
+      
+      // If it is NOT a YouTube/Vimeo link, attempt native playback
+      if (!_isYoutubeOrVimeo(url)) {
+        if (!url.startsWith('http')) {
+          url = 'https://academy.kainuwa.africa/' + url;
+        }
+        
+        _videoController = VideoPlayerController.network(url)
+          ..initialize().then((_) {
+            if (mounted) {
+                setState(() {});
+                _videoController!.play();
+            }
+          }).catchError((error) {
+             print("Playback error: $error");
+          });
       }
-      _videoController = VideoPlayerController.network(url)
-        ..initialize().then((_) {
-          setState(() {});
-          _videoController!.play();
-        });
     }
   }
 
@@ -143,7 +160,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   Widget _buildPlayerArea() {
     if (_currentLesson!.contentType == 'video') {
-      if (_currentLesson!.videoSource != 'mp4') {
+      if (_isYoutubeOrVimeo(_currentLesson!.content)) {
         return const Center(
           child: Padding(
             padding: EdgeInsets.all(16.0),
@@ -155,6 +172,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ),
         );
       }
+      
       if (_videoController != null && _videoController!.value.isInitialized) {
         return AspectRatio(
           aspectRatio: _videoController!.value.aspectRatio,
@@ -180,6 +198,11 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ),
         );
       }
+      
+      if (_videoController != null && _videoController!.value.hasError) {
+         return const Center(child: Text('Error loading video. Please check your internet connection.', style: TextStyle(color: Colors.red)));
+      }
+      
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     } else {
       return const Center(
