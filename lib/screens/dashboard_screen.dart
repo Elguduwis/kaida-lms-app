@@ -4,6 +4,7 @@ import '../config/app_theme.dart';
 import '../models/course_model.dart';
 import '../services/course_service.dart';
 import 'login_screen.dart';
+import 'course_player_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -72,12 +73,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 margin: const EdgeInsets.only(bottom: 20),
                 child: InkWell(
                   onTap: () {
-                    // TODO: Open Video Player
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: course.id, courseTitle: course.title)));
                   },
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Course Image
                       course.thumbnailUrl.isNotEmpty
                           ? Image.network(
                               course.thumbnailUrl,
@@ -96,7 +96,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               child: const Icon(Icons.school, size: 60, color: Colors.white),
                             ),
                       
-                      // Course Details
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -115,7 +114,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 16),
                             
-                            // Progress Bar
                             LinearProgressIndicator(
                               value: course.progress / 100,
                               backgroundColor: Colors.grey[200],
@@ -133,7 +131,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 16),
                             
-                            // Action Button
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
@@ -143,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
                                 onPressed: () {
-                                  // TODO: Navigate to player
+                                  Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: course.id, courseTitle: course.title)));
                                 },
                                 child: Text(
                                   course.progress > 0 ? 'Continue Course' : 'Start Course',
