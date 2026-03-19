@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'screens/login_screen.dart';
+import 'screens/dashboard_screen.dart';
 
 void main() {
   runApp(const KaidaApp());
@@ -38,16 +40,25 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToLogin();
+    _checkLoginStatus();
   }
 
-  _navigateToLogin() async {
+  _checkLoginStatus() async {
+    // Show splash screen for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
+    
+    // Check phone memory for the auth token
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    
     if (!mounted) return;
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-    );
+    
+    // If token exists, skip login and go straight to Dashboard!
+    if (token != null && token.isNotEmpty) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+    } else {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+    }
   }
 
   @override
@@ -62,12 +73,7 @@ class _SplashScreenState extends State<SplashScreen> {
             SizedBox(height: 20),
             Text(
               'KAIDA LMS',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
             ),
             SizedBox(height: 40),
             CircularProgressIndicator(color: Colors.white),
