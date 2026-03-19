@@ -24,8 +24,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success']) {
+      // TODO: Navigate to Dashboard
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Login Successful! Welcome!')),
+        const SnackBar(content: Text('Login Successful! Welcome to Kainuwa!')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
