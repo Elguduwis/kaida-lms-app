@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'login_screen.dart';
 
@@ -13,18 +16,46 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   int? _userId;
+  bool _isLoading = true;
+  String _name = "Loading...";
+  String _role = "student";
+  String? _avatarUrl;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _fetchProfileData();
   }
 
-  Future<void> _loadUserData() async {
+  Future<void> _fetchProfileData() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _userId = prefs.getInt('user_id');
-    });
+    final userId = prefs.getInt('user_id');
+    
+    if (userId == null) return;
+    setState(() => _userId = userId);
+
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.userProfile),
+        body: {'user_id': userId.toString()},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          if (mounted) {
+            setState(() {
+              _name = data['data']['name'];
+              _role = data['data']['role'];
+              _avatarUrl = data['data']['avatar_url'];
+              _isLoading = false;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   void _logout() async {
@@ -39,11 +70,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openWebDashboard(String viewRole, String title) {
+  void _openWebDashboard(String redirectPath, String title) {
     if (_userId == null) return;
     
-    // Use the secure auto-login bridge to switch roles
-    final authUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/switch_view.php?view=$viewRole';
+    // Uses the secure auto-login bridge to load the correct web path
+    final authUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$redirectPath';
     
     Navigator.push(
       context,
@@ -55,13 +86,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Smart Role Logic (Admins see everything)
+    bool isInstructor = _role == 'instructor' || _role == 'admin';
+    bool isAffiliate = _role == 'affiliate' || _role == 'admin';
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+        : SingleChildScrollView(
         child: Column(
           children: [
             // Header Profile Section
@@ -78,53 +115,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: AppTheme.primaryColor.withOpacity(0.1),
                       shape: BoxShape.circle,
                       border: Border.all(color: AppTheme.primaryColor, width: 2),
+                      image: (_avatarUrl != null && _avatarUrl!.isNotEmpty) 
+                        ? DecorationImage(
+                            image: NetworkImage(_avatarUrl!),
+                            fit: BoxFit.cover,
+                          ) 
+                        : null,
                     ),
-                    child: const Icon(Icons.person, size: 50, color: AppTheme.primaryColor),
+                    child: (_avatarUrl == null || _avatarUrl!.isEmpty)
+                      ? const Icon(Icons.person, size: 50, color: AppTheme.primaryColor)
+                      : null,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Kainuwa Student',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  Text(
+                    _name,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Manage your account & roles',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20)
+                    ),
+                    child: Text(
+                      _role.toUpperCase(),
+                      style: const TextStyle(color: AppTheme.primaryColor, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            // Role Switching Section
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Creator & Partner Hub', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  const SizedBox(height: 10),
-                  
-                  _buildMenuCard(
-                    title: 'Instructor Dashboard',
-                    subtitle: 'Manage courses, lessons, and students',
-                    icon: Icons.school,
-                    color: Colors.blue,
-                    onTap: () => _openWebDashboard('instructor', 'Instructor Panel'),
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  _buildMenuCard(
-                    title: 'Affiliate Dashboard',
-                    subtitle: 'Track your referrals and payouts',
-                    icon: Icons.handshake,
-                    color: Colors.orange,
-                    onTap: () => _openWebDashboard('affiliate', 'Affiliate Panel'),
-                  ),
-                ],
+            // Role Switching Section (Conditionally Rendered!)
+            if (isInstructor || isAffiliate)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Creator & Partner Hub', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 10),
+                    
+                    if (isInstructor)
+                      _buildMenuCard(
+                        title: 'Instructor Dashboard',
+                        subtitle: 'Manage courses, lessons, and students',
+                        icon: Icons.school,
+                        color: Colors.blue,
+                        onTap: () => _openWebDashboard('/switch_view.php?view=instructor', 'Instructor Panel'),
+                      ),
+                      
+                    if (isInstructor && isAffiliate) const SizedBox(height: 10),
+                    
+                    if (isAffiliate)
+                      _buildMenuCard(
+                        title: 'Affiliate Dashboard',
+                        subtitle: 'Track your referrals and payouts',
+                        icon: Icons.handshake,
+                        color: Colors.orange,
+                        onTap: () => _openWebDashboard('/switch_view.php?view=affiliate', 'Affiliate Panel'),
+                      ),
+                      
+                    const SizedBox(height: 30),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 30),
 
             // Account Actions
             Padding(
@@ -136,11 +193,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 10),
                   
                   _buildMenuCard(
-                    title: 'Edit Profile (Web)',
-                    subtitle: 'Update your password and details',
+                    title: 'Profile Settings',
+                    subtitle: 'Update your password, avatar, and details',
                     icon: Icons.settings,
                     color: Colors.grey[700]!,
-                    onTap: () => _openWebDashboard('student', 'Profile Settings'), // Student view defaults to settings if routed right
+                    onTap: () => _openWebDashboard('/my-profile/', 'Profile Settings'), 
                   ),
                   const SizedBox(height: 10),
                   
@@ -205,7 +262,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// Reusable Web Dashboard Screen for Roles
+// Reusable Web Dashboard Screen for Roles and Settings
 class WebDashboardScreen extends StatefulWidget {
   final String url;
   final String title;
