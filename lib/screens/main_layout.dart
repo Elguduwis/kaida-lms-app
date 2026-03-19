@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
+import 'home_screen.dart';
 import 'dashboard_screen.dart';
-// We will build these next!
-// import 'explore_screen.dart'; 
-// import 'profile_screen.dart';
+import 'explore_screen.dart';
+import 'profile_screen.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -13,13 +13,13 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _currentIndex = 2; // Default to 'My Learning' for now
+  int _currentIndex = 0; 
 
   final List<Widget> _screens = [
-    const Center(child: Text('Home Dashboard (Coming Next)', style: TextStyle(fontSize: 18))),
-    const Center(child: Text('Explore / Shop (Coming Next)', style: TextStyle(fontSize: 18))),
-    const DashboardScreen(), // This is the My Courses screen we already built
-    const Center(child: Text('Profile & Role Switch (Coming Next)', style: TextStyle(fontSize: 18))),
+    const HomeScreen(),
+    const ExploreScreen(),
+    const DashboardScreen(), 
+    const ProfileScreen(), // <--- NEW PROFILE SCREEN CONNECTED
   ];
 
   @override
@@ -40,7 +40,7 @@ class _MainLayoutState extends State<MainLayout> {
         selectedItemColor: AppTheme.primaryColor,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Explore'),
           BottomNavigationBarItem(icon: Icon(Icons.play_circle_fill), label: 'My Learning'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),

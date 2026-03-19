@@ -7,4 +7,5 @@ class ApiConfig {
   static const String myCourses = '$baseUrl/my_courses.php';
   static const String courseLessons = '$baseUrl/course_lessons.php';
   static const String saveProgress = '$baseUrl/save_progress.php';
+  static const String dashboardData = '$baseUrl/dashboard_data.php';
 }
