@@ -33,6 +33,11 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
       
+    - name: Generate Icons and Splash
+      run: |
+        flutter pub run flutter_launcher_icons
+        flutter pub run flutter_native_splash:create
+      
     - name: Build APK
       run: flutter build apk --release
       
