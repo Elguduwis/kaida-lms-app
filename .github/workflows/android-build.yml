@@ -26,20 +26,15 @@ jobs:
     - name: Generate Platform Folders
       run: flutter create --platforms=android .
         
-    - name: Inject Permissions and PIP (Option A)
+    - name: Add Internet Permission
       run: |
         sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-        sed -i 's/<activity /<activity android:supportsPictureInPicture="true" /g' android/app/src/main/AndroidManifest.xml
         
     - name: Install dependencies
       run: flutter pub get
       
     - name: Build APK
       run: flutter build apk --release
-      
-    - name: Sign APK with Permanent Keystore
-      run: |
-        jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore kaida-key.jks -storepass kainuwa2026 build/app/outputs/flutter-apk/app-release.apk kaida
       
     - name: Upload APK
       uses: actions/upload-artifact@v4

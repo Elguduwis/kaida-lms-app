@@ -1,3 +1,4 @@
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -40,6 +41,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     _loadDownloadedLessons();
     _loadCourseData();
   }
@@ -234,6 +236,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     }
     _chewieController?.dispose();
     _videoController?.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 
