@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'screens/login_screen.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/main_layout.dart';
 
 void main() {
   runApp(const KaidaApp());
@@ -55,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> {
     
     // If token exists, skip login and go straight to Dashboard!
     if (token != null && token.isNotEmpty) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainLayout()));
     } else {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
     }

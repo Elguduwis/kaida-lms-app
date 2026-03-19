@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../services/auth_service.dart';
-import 'dashboard_screen.dart';
+import 'main_layout.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -28,7 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const MainLayout()),
       );
     } else {
       if (!mounted) return;
