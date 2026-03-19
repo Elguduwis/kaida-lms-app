@@ -30,4 +30,25 @@ class CoursePlayerService {
       return null;
     }
   }
+
+  // NEW: Save progress silently to the server
+  Future<void> saveVideoProgress(int lessonId, double timestamp) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+
+      if (userId == null) return;
+
+      await http.post(
+        Uri.parse(ApiConfig.saveProgress),
+        body: {
+          'user_id': userId.toString(),
+          'lesson_id': lessonId.toString(),
+          'timestamp': timestamp.toString()
+        },
+      );
+    } catch (e) {
+      // Fail silently, no need to interrupt the user's video
+    }
+  }
 }

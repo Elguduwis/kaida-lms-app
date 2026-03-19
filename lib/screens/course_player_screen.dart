@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
@@ -23,8 +24,8 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
+  Timer? _progressTimer;
 
-  // Flatten the lessons list to easily find previous/next
   List<LessonModel> get _allLessons => _sections.expand((s) => s.lessons).toList();
 
   @override
@@ -53,10 +54,29 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
            lowerUrl.contains('vimeo.com');
   }
 
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    // Silently save progress to the server every 10 seconds
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_currentLesson != null && _videoController != null && _videoController!.value.isPlaying) {
+        _service.saveVideoProgress(
+          _currentLesson!.id, 
+          _videoController!.value.position.inSeconds.toDouble()
+        );
+      }
+    });
+  }
+
   void _playLesson(LessonModel lesson) async {
+    // Save progress of the outgoing lesson before switching
+    if (_currentLesson != null && _videoController != null) {
+      _service.saveVideoProgress(_currentLesson!.id, _videoController!.value.position.inSeconds.toDouble());
+    }
+
+    _progressTimer?.cancel();
+
     setState(() {
       _currentLesson = lesson;
-      // Clean up old players before starting a new one
       if (_chewieController != null) {
         _chewieController!.dispose();
         _chewieController = null;
@@ -92,6 +112,8 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ),
         );
 
+        _startProgressTimer();
+
         // Auto-Next Logic
         _videoController!.addListener(() {
           if (_videoController!.value.isInitialized &&
@@ -125,6 +147,10 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   @override
   void dispose() {
+    _progressTimer?.cancel();
+    if (_currentLesson != null && _videoController != null) {
+      _service.saveVideoProgress(_currentLesson!.id, _videoController!.value.position.inSeconds.toDouble());
+    }
     _chewieController?.dispose();
     _videoController?.dispose();
     super.dispose();
@@ -145,7 +171,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
           : Column(
               children: [
-                // Top: Video Player Area
                 Container(
                   width: double.infinity,
                   height: 230,
@@ -154,8 +179,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                       ? const Center(child: Text('Select a lesson', style: TextStyle(color: Colors.white)))
                       : _buildPlayerArea(),
                 ),
-                
-                // Title Area
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -165,10 +188,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
-                
                 const Divider(height: 1, thickness: 1),
-
-                // Next / Prev Navigation Bar
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   color: Colors.white,
@@ -193,10 +213,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                     ],
                   ),
                 ),
-                
                 const Divider(height: 1, thickness: 1),
-                
-                // Bottom: Curriculum List
                 Expanded(
                   child: ListView.builder(
                     itemCount: _sections.length,
@@ -235,31 +252,14 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   Widget _buildPlayerArea() {
     if (_currentLesson!.contentType == 'video') {
       if (_isYoutubeOrVimeo(_currentLesson!.content)) {
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'This is a YouTube/Vimeo video. Native playback requires advanced plugins which will be added in Phase 2.',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        );
+        return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('This is a YouTube/Vimeo video. Native playback requires advanced plugins which will be added in Phase 2.', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center)));
       }
-      
       if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
         return Chewie(controller: _chewieController!);
       }
-      
-      if (_videoController != null && _videoController!.value.hasError) {
-         return const Center(child: Text('Error loading video. Please check your internet connection.', style: TextStyle(color: Colors.red)));
-      }
-      
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     } else {
-      return const Center(
-        child: Icon(Icons.article, size: 60, color: Colors.white54),
-      );
+      return const Center(child: Icon(Icons.article, size: 60, color: Colors.white54));
     }
   }
 }
