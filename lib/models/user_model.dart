@@ -13,10 +13,11 @@ class UserModel {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['user_id'] ?? 0,
-      name: json['name'] ?? '',
-      email: json['email'] ?? '',
-      token: json['token'] ?? '',
+      // This safely converts the ID whether PHP sends it as text or a number
+      id: json['user_id'] != null ? int.tryParse(json['user_id'].toString()) ?? 0 : 0,
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      token: json['token']?.toString() ?? '',
     );
   }
 }
