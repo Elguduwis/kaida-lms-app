@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../models/course_detail_model.dart';
 import '../services/course_player_service.dart';
@@ -26,12 +31,31 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   ChewieController? _chewieController;
   Timer? _progressTimer;
 
+  // Offline Download Tracking
+  Map<int, String> _downloadedLessons = {};
+  Map<int, double> _downloadProgress = {};
+
   List<LessonModel> get _allLessons => _sections.expand((s) => s.lessons).toList();
 
   @override
   void initState() {
     super.initState();
+    _loadDownloadedLessons();
     _loadCourseData();
+  }
+
+  // Load saved downloads from the phone's memory
+  void _loadDownloadedLessons() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? downloadsJson = prefs.getString('offline_downloads');
+    if (downloadsJson != null) {
+      if (mounted) {
+        setState(() {
+          Map<String, dynamic> decoded = json.decode(downloadsJson);
+          _downloadedLessons = decoded.map((key, value) => MapEntry(int.parse(key), value.toString()));
+        });
+      }
+    }
   }
 
   void _loadCourseData() async {
@@ -56,19 +80,64 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   void _startProgressTimer() {
     _progressTimer?.cancel();
-    // Silently save progress to the server every 10 seconds
     _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (_currentLesson != null && _videoController != null && _videoController!.value.isPlaying) {
-        _service.saveVideoProgress(
-          _currentLesson!.id, 
-          _videoController!.value.position.inSeconds.toDouble()
-        );
+        _service.saveVideoProgress(_currentLesson!.id, _videoController!.value.position.inSeconds.toDouble());
       }
     });
   }
 
+  // --- DOWNLOAD LOGIC ---
+  void _downloadLesson(LessonModel lesson) async {
+    if (lesson.contentType != 'video' || _isYoutubeOrVimeo(lesson.content)) return;
+
+    setState(() {
+      _downloadProgress[lesson.id] = 0.01; // Start progress UI
+    });
+
+    try {
+      String url = lesson.content;
+      if (!url.startsWith('http')) {
+        url = 'https://academy.kainuwa.africa/' + url;
+      }
+
+      // Find the safe internal app folder
+      final dir = await getApplicationDocumentsDirectory();
+      final savePath = '${dir.path}/lesson_${lesson.id}.mp4';
+
+      final dio = Dio();
+      await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress[lesson.id] = received / total;
+            });
+          }
+        },
+      );
+
+      // Save the file path to phone memory
+      final prefs = await SharedPreferences.getInstance();
+      _downloadedLessons[lesson.id] = savePath;
+      await prefs.setString('offline_downloads', json.encode(_downloadedLessons.map((key, value) => MapEntry(key.toString(), value))));
+
+      setState(() {
+        _downloadProgress.remove(lesson.id);
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lesson.title} downloaded for offline viewing!'), backgroundColor: Colors.green));
+
+    } catch (e) {
+      setState(() {
+        _downloadProgress.remove(lesson.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed. Check your connection.'), backgroundColor: Colors.red));
+    }
+  }
+
   void _playLesson(LessonModel lesson) async {
-    // Save progress of the outgoing lesson before switching
     if (_currentLesson != null && _videoController != null) {
       _service.saveVideoProgress(_currentLesson!.id, _videoController!.value.position.inSeconds.toDouble());
     }
@@ -91,11 +160,24 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
       String url = lesson.content;
       
       if (!_isYoutubeOrVimeo(url)) {
-        if (!url.startsWith('http')) {
-          url = 'https://academy.kainuwa.africa/' + url;
-        }
         
-        _videoController = VideoPlayerController.network(url);
+        // CHECK FOR OFFLINE FILE FIRST!
+        if (_downloadedLessons.containsKey(lesson.id)) {
+          File localFile = File(_downloadedLessons[lesson.id]!);
+          if (await localFile.exists()) {
+             _videoController = VideoPlayerController.file(localFile);
+          } else {
+             // Fallback if file was deleted
+             _downloadedLessons.remove(lesson.id);
+             if (!url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url;
+             _videoController = VideoPlayerController.network(url);
+          }
+        } else {
+          // Play from Internet
+          if (!url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url;
+          _videoController = VideoPlayerController.network(url);
+        }
+
         await _videoController!.initialize();
 
         _chewieController = ChewieController(
@@ -114,7 +196,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
         _startProgressTimer();
 
-        // Auto-Next Logic
         _videoController!.addListener(() {
           if (_videoController!.value.isInitialized &&
               !_videoController!.value.isPlaying &&
@@ -154,6 +235,35 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     _chewieController?.dispose();
     _videoController?.dispose();
     super.dispose();
+  }
+
+  // --- UI BUILDING ---
+  Widget _buildDownloadButton(LessonModel lesson) {
+    if (lesson.contentType != 'video' || _isYoutubeOrVimeo(lesson.content)) return const SizedBox();
+    
+    // 1. Check if downloaded
+    if (_downloadedLessons.containsKey(lesson.id)) {
+      return const Icon(Icons.offline_pin, color: Colors.green);
+    }
+    
+    // 2. Check if currently downloading
+    if (_downloadProgress.containsKey(lesson.id)) {
+      return SizedBox(
+        width: 24, height: 24,
+        child: CircularProgressIndicator(
+          value: _downloadProgress[lesson.id], 
+          strokeWidth: 3, 
+          color: AppTheme.primaryColor
+        ),
+      );
+    }
+    
+    // 3. Show download button
+    return IconButton(
+      icon: const Icon(Icons.download, color: Colors.grey),
+      onPressed: () => _downloadLesson(lesson),
+      tooltip: 'Download Lesson',
+    );
   }
 
   @override
@@ -237,6 +347,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                                 fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
+                            trailing: _buildDownloadButton(lesson), // THE NEW DOWNLOAD BUTTON
                             onTap: () => _playLesson(lesson),
                           );
                         }).toList(),
