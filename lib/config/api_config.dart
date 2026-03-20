@@ -11,4 +11,5 @@ class ApiConfig {
   static const String userProfile = '$baseUrl/user_profile.php';
   static const String myDownloads = '$baseUrl/my_downloads.php';
   static const String courseDetails = '$baseUrl/course_details.php?slug=';
+  static const String getWishlist = '$baseUrl/get_wishlist.php';
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'item_details_screen.dart';
@@ -83,7 +84,53 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   void initState() {
     super.initState();
+    _fetchWishlist();
     _fetchData();
+  }
+
+  Future<void> _fetchWishlist() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId == null) return;
+
+    // 1. Instantly load from offline memory
+    final cachedWishlist = prefs.getString('cached_wishlist_${widget.actionType}');
+    if (cachedWishlist != null) {
+      List<dynamic> list = json.decode(cachedWishlist);
+      if (mounted) {
+        setState(() {
+          _wishlistedIds = list.map((e) => int.parse(e.toString())).toSet();
+        });
+      }
+    }
+
+    // 2. Sync with database in the background
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.getWishlist),
+        body: {'user_id': userId.toString()},
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          List<dynamic> items = data['data'];
+          Set<int> syncedIds = {};
+          String expectedType = widget.actionType == 'courses' ? 'course' : 'product';
+          
+          for (var item in items) {
+            if (item['item_type'] == expectedType) {
+              syncedIds.add(int.parse(item['item_id'].toString()));
+            }
+          }
+          if (mounted) {
+            setState(() => _wishlistedIds = syncedIds);
+            prefs.setString('cached_wishlist_${widget.actionType}', json.encode(syncedIds.toList()));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Wishlist API Error: $e");
+    }
   }
 
   Future<void> _fetchData() async {
@@ -143,11 +190,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
       }
     });
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id');
-      if (userId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString('cached_wishlist_${widget.actionType}', json.encode(_wishlistedIds.toList()));
 
+    final userId = prefs.getInt('user_id');
+    if (userId == null) return;
+
+    try {
       await http.post(
         Uri.parse('https://academy.kainuwa.africa/api/toggle_wishlist.php'),
         headers: {'Content-Type': 'application/json'},
@@ -205,7 +254,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
           if (!_isLoading && _categories.length > 1)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.only(top: 16, bottom: 8), // FIXED: No more clipping!
+                padding: const EdgeInsets.only(top: 16, bottom: 8), 
                 child: SizedBox(
                   height: 40,
                   child: ListView.builder(
@@ -310,7 +359,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 fit: StackFit.expand,
                 children: [
                   item.thumbnailUrl.isNotEmpty
-                      ? Image.network(item.thumbnailUrl, fit: BoxFit.cover)
+                      // CACHED OFFLINE IMAGE
+                      ? CachedNetworkImage(
+                          imageUrl: item.thumbnailUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(color: Colors.grey.shade200),
+                          errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, color: Colors.white)),
+                        )
                       : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
                   Positioned(
                     top: 8, left: 8,
@@ -320,7 +375,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     ),
                   ),
-                  // WISHLIST HEART ICON
                   Positioned(
                     top: 8, right: 8,
                     child: GestureDetector(
