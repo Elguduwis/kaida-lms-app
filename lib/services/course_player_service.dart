@@ -4,16 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 
 class CoursePlayerService {
-  Future<Map<String, dynamic>?> getCourseDetails(int courseId) async {
+  // CHANGED: From Map<String, dynamic> to dynamic so it accepts Lists without crashing
+  Future<dynamic> getCourseDetails(int courseId) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     final cacheKey = 'course_curriculum_$courseId';
 
-    // If there is no user logged in, we can't fetch secure videos
     if (userId == null) return null;
 
     try {
-      // FIX: Changed back to a POST request and securely passing the user_id
       final response = await http.post(
         Uri.parse(ApiConfig.courseLessons),
         body: {
@@ -25,17 +24,13 @@ class CoursePlayerService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // SAVE TO CACHE FOR OFFLINE DOWNLOAD VIEWING
           prefs.setString(cacheKey, json.encode(data['data']));
           return data['data'];
         }
       }
     } catch (e) {
-      // OFFLINE SURVIVAL MODE!
       final cached = prefs.getString(cacheKey);
-      if (cached != null) {
-        return json.decode(cached);
-      }
+      if (cached != null) return json.decode(cached);
     }
     return null;
   }
@@ -54,8 +49,6 @@ class CoursePlayerService {
           'seconds_watched': secondsWatched.toString(),
         },
       ).timeout(const Duration(seconds: 5));
-    } catch (e) {
-      // Ignore in offline mode, it will sync next time
-    }
+    } catch (e) {}
   }
 }
