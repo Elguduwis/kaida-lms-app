@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'login_screen.dart';
@@ -18,268 +19,237 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   int? _userId;
   bool _isLoading = true;
+  bool _isUploadingAvatar = false;
+  
   String _name = "Loading...";
+  String _email = "";
   String _role = "student";
   String? _avatarUrl;
+  String _walletBalance = "0.00";
 
   @override
   void initState() {
     super.initState();
-    _fetchProfileData();
+    _fetchData();
   }
 
-  Future<void> _fetchProfileData() async {
+  Future<void> _fetchData() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
-    
     if (userId == null) return;
     setState(() => _userId = userId);
 
     try {
-      final response = await http.post(
-        Uri.parse(ApiConfig.userProfile),
-        body: {'user_id': userId.toString()},
-      );
+      // Fetch Profile Data
+      final profileRes = await http.post(Uri.parse(ApiConfig.userProfile), body: {'user_id': userId.toString()});
+      if (profileRes.statusCode == 200) {
+        final pData = json.decode(profileRes.body);
+        if (pData['status'] == 'success' && mounted) {
+          setState(() {
+            _name = pData['data']['name'];
+            _email = pData['data']['email'];
+            _role = pData['data']['role'];
+            _avatarUrl = pData['data']['avatar_url'];
+          });
+        }
+      }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          if (mounted) {
-            setState(() {
-              _name = data['data']['name'];
-              _role = data['data']['role'];
-              _avatarUrl = data['data']['avatar_url'];
-              _isLoading = false;
-            });
-          }
+      // Fetch Wallet Balance
+      final dashRes = await http.post(Uri.parse(ApiConfig.dashboardData), body: {'user_id': userId.toString()});
+      if (dashRes.statusCode == 200) {
+        final dData = json.decode(dashRes.body);
+        if (dData['status'] == 'success' && mounted) {
+          setState(() => _walletBalance = dData['data']['wallet_balance'].toString());
         }
       }
     } catch (e) {
+      debugPrint("Profile Error: $e");
+    } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _uploadAvatar() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
+    
+    if (pickedFile != null && _userId != null) {
+      setState(() => _isUploadingAvatar = true);
+      try {
+        var request = http.MultipartRequest('POST', Uri.parse(ApiConfig.uploadAvatar));
+        request.fields['user_id'] = _userId.toString();
+        request.files.add(await http.MultipartFile.fromPath('avatar', pickedFile.path));
+        
+        var response = await request.send();
+        if (response.statusCode == 200) {
+          var responseData = await response.stream.bytesToString();
+          var jsonResponse = json.decode(responseData);
+          if (jsonResponse['status'] == 'success') {
+            setState(() => _avatarUrl = jsonResponse['avatar_url']);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated successfully!'), backgroundColor: Colors.green));
+          } else {
+            throw Exception(jsonResponse['message']);
+          }
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update picture.'), backgroundColor: Colors.red));
+      } finally {
+        setState(() => _isUploadingAvatar = false);
+      }
     }
   }
 
   void _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    
     if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
-    );
-  }
-
-  void _openWebDashboard(String redirectPath, String title) async {
-    if (_userId == null) return;
-    
-    final authUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$redirectPath';
-    
-    // Wait until the web view is closed by the user
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => WebDashboardScreen(url: authUrl, title: title),
-      ),
-    );
-    
-    // Automatically refresh the profile data (like the avatar) when they come back!
-    if (mounted) _fetchProfileData();
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (Route<dynamic> route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isInstructor = _role == 'instructor' || _role == 'admin';
-    bool isAffiliate = _role == 'affiliate' || _role == 'admin';
+    if (_isLoading) return const Scaffold(backgroundColor: AppTheme.backgroundColor, body: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)));
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-      ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-        : SingleChildScrollView(
+      body: SingleChildScrollView(
         child: Column(
           children: [
-            // Header Profile Section
+            // HEADER & AVATAR
             Container(
               width: double.infinity,
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 30),
+              padding: const EdgeInsets.only(top: 60, bottom: 40),
+              decoration: const BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(40), bottomRight: Radius.circular(40)),
+              ),
               child: Column(
                 children: [
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.primaryColor, width: 2),
-                      image: (_avatarUrl != null && _avatarUrl!.isNotEmpty) 
-                        ? DecorationImage(
-                            image: NetworkImage(_avatarUrl!),
-                            fit: BoxFit.cover,
-                          ) 
-                        : null,
-                    ),
-                    child: (_avatarUrl == null || _avatarUrl!.isEmpty)
-                      ? const Icon(Icons.person, size: 50, color: AppTheme.primaryColor)
-                      : null,
+                  Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.white24,
+                          backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty) ? NetworkImage(_avatarUrl!) : null,
+                          child: (_avatarUrl == null || _avatarUrl!.isEmpty) ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: _uploadAvatar,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          child: _isUploadingAvatar 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
+                            : const Icon(Icons.camera_alt, color: AppTheme.primaryColor, size: 16),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    _name,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                  Text(_name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20)
-                    ),
-                    child: Text(
-                      _role.toUpperCase(),
-                      style: const TextStyle(color: AppTheme.primaryColor, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                  Text(_email, style: const TextStyle(fontSize: 14, color: Colors.white70)),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
 
-            // Role Switching Section
-            if (isInstructor || isAffiliate)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // KAIDA WALLET CARD
+            Transform.translate(
+              offset: const Offset(0, -30),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Creator & Partner Hub', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
-                    const SizedBox(height: 10),
-                    
-                    if (isInstructor)
-                      _buildMenuCard(
-                        title: 'Instructor Dashboard',
-                        subtitle: 'Manage courses, lessons, and students',
-                        icon: Icons.school,
-                        color: Colors.blue,
-                        onTap: () => _openWebDashboard('/switch_view.php?view=instructor', 'Instructor Panel'),
-                      ),
-                      
-                    if (isInstructor && isAffiliate) const SizedBox(height: 10),
-                    
-                    if (isAffiliate)
-                      _buildMenuCard(
-                        title: 'Affiliate Dashboard',
-                        subtitle: 'Track your referrals and payouts',
-                        icon: Icons.handshake,
-                        color: Colors.orange,
-                        onTap: () => _openWebDashboard('/switch_view.php?view=affiliate', 'Affiliate Panel'),
-                      ),
-                      
-                    const SizedBox(height: 30),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.account_balance_wallet, color: AppTheme.primaryColor, size: 20),
+                            SizedBox(width: 8),
+                            Text('KAIDA Wallet', style: TextStyle(color: Colors.black54, fontSize: 14, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text('$_walletBalance KAIDA', style: const TextStyle(color: Colors.black87, fontSize: 24, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                      onPressed: () {},
+                      child: const Text('Top Up', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
                   ],
                 ),
               ),
+            ),
 
-            // Account Actions
+            // MENU LIST
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Account', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  const SizedBox(height: 10),
+                  _buildMenuTile(Icons.favorite, 'My Wishlist', () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wishlist page coming soon!')));
+                  }),
+                  _buildMenuTile(Icons.cloud_download, 'Digital Downloads', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen()));
+                  }),
                   
-                  _buildMenuCard(
-                    title: 'My Digital Downloads',
-                    subtitle: 'Access your purchased ebooks and files',
-                    icon: Icons.download,
-                    color: Colors.green,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
-                  ),
-                  const SizedBox(height: 10),
+                  if (_role == 'instructor' || _role == 'admin')
+                    _buildMenuTile(Icons.dashboard, 'Instructor Dashboard', () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: 'Instructor Panel', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/dashboard')));
+                    }),
 
-                  _buildMenuCard(
-                    title: 'Profile Settings',
-                    subtitle: 'Update your password, avatar, and details',
-                    icon: Icons.settings,
-                    color: Colors.grey[700]!,
-                    onTap: () => _openWebDashboard('/my-profile/', 'Profile Settings'), 
-                  ),
-                  const SizedBox(height: 10),
-                  
-                  Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.red.shade100)),
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(Icons.logout, color: Colors.red),
-                      ),
-                      title: const Text('Log Out', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Log Out?'),
-                            content: const Text('Are you sure you want to log out of your account?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _logout();
-                                },
-                                child: const Text('Log Out', style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  _buildMenuTile(Icons.share, 'Affiliate Dashboard', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: 'Affiliate Panel', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/dashboard')));
+                  }),
+
+                  _buildMenuTile(Icons.logout, 'Log Out', _logout, isDestructive: true),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
-            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap, {bool isDestructive = false}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: color),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: isDestructive ? Colors.red.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(icon, color: isDestructive ? Colors.red : AppTheme.primaryColor, size: 20),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isDestructive ? Colors.red : Colors.black87)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
         onTap: onTap,
       ),
     );
   }
 }
 
+// Reusable Web View for Instructor/Affiliate Panels
 class WebDashboardScreen extends StatefulWidget {
-  final String url;
   final String title;
-
-  const WebDashboardScreen({Key? key, required this.url, required this.title}) : super(key: key);
-
+  final String url;
+  const WebDashboardScreen({Key? key, required this.title, required this.url}) : super(key: key);
   @override
   _WebDashboardScreenState createState() => _WebDashboardScreenState();
 }
@@ -293,15 +263,10 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppTheme.backgroundColor)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
-            if (mounted) setState(() => _isLoading = true);
-          },
-          onPageFinished: (String url) {
-            if (mounted) setState(() => _isLoading = false);
-          },
+          onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
+          onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
@@ -310,17 +275,7 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Text(widget.title, style: const TextStyle(fontSize: 16)),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: () => _controller.reload()),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)), iconTheme: const IconThemeData(color: Colors.white)),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),

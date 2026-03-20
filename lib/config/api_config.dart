@@ -1,6 +1,5 @@
 class ApiConfig {
   static const String baseUrl = 'https://academy.kainuwa.africa/api/mobile';
-  
   static const String login = '$baseUrl/login.php';
   static const String register = '$baseUrl/register.php';
   static const String courses = '$baseUrl/courses.php';
@@ -12,4 +11,6 @@ class ApiConfig {
   static const String myDownloads = '$baseUrl/my_downloads.php';
   static const String courseDetails = '$baseUrl/course_details.php?slug=';
   static const String getWishlist = '$baseUrl/get_wishlist.php';
+  static const String uploadAvatar = '$baseUrl/upload_avatar.php';
+  static const String getDownloadLink = '$baseUrl/get_download_link.php';
 }
