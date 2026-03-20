@@ -6,9 +6,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'login_screen.dart';
+import 'downloads_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-import 'downloads_screen.dart';
   const ProfileScreen({Key? key}) : super(key: key);
 
   @override
@@ -74,17 +74,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _openWebDashboard(String redirectPath, String title) async {
     if (_userId == null) return;
     
-    // Uses the secure auto-login bridge to load the correct web path
     final authUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$redirectPath';
     
+    // Wait until the web view is closed by the user
     await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WebDashboardScreen(url: authUrl, title: title),
+      ),
     );
+    
+    // Automatically refresh the profile data (like the avatar) when they come back!
     if (mounted) _fetchProfileData();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Smart Role Logic (Admins see everything)
     bool isInstructor = _role == 'instructor' || _role == 'admin';
     bool isAffiliate = _role == 'affiliate' || _role == 'admin';
 
@@ -146,7 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Role Switching Section (Conditionally Rendered!)
+            // Role Switching Section
             if (isInstructor || isAffiliate)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -157,15 +162,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 10),
                     
                     if (isInstructor)
-                  _buildMenuCard(
-                    title: 'My Digital Downloads',
-                    subtitle: 'Access your purchased ebooks and files',
-                    icon: Icons.download,
-                    color: Colors.green,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
-                  ),
-                  const SizedBox(height: 10),
-
                       _buildMenuCard(
                         title: 'Instructor Dashboard',
                         subtitle: 'Manage courses, lessons, and students',
@@ -177,15 +173,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     if (isInstructor && isAffiliate) const SizedBox(height: 10),
                     
                     if (isAffiliate)
-                  _buildMenuCard(
-                    title: 'My Digital Downloads',
-                    subtitle: 'Access your purchased ebooks and files',
-                    icon: Icons.download,
-                    color: Colors.green,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
-                  ),
-                  const SizedBox(height: 10),
-
                       _buildMenuCard(
                         title: 'Affiliate Dashboard',
                         subtitle: 'Track your referrals and payouts',
@@ -267,15 +254,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-                  _buildMenuCard(
-                    title: 'My Digital Downloads',
-                    subtitle: 'Access your purchased ebooks and files',
-                    icon: Icons.download,
-                    color: Colors.green,
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
-                  ),
-                  const SizedBox(height: 10),
-
   Widget _buildMenuCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Card(
       elevation: 0,
@@ -296,7 +274,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// Reusable Web Dashboard Screen for Roles and Settings
 class WebDashboardScreen extends StatefulWidget {
   final String url;
   final String title;
