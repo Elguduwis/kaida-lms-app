@@ -205,7 +205,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ),
         );
 
-        _startProgressTracking();
+        _startProgressTimer();
 
         _videoController!.addListener(() {
           if (_videoController!.value.isInitialized && !_videoController!.value.isPlaying &&
