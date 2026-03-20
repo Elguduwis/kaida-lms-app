@@ -34,9 +34,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     final data = await CoursePlayerService().getCourseDetails(widget.courseId);
     if (data != null) {
       List<dynamic> parsedSections = [];
-      // Safely handles whatever structure the server sends back
+      
+      // Safety checks to parse any format the server/cache throws at it
       if (data is List) {
         parsedSections = data;
+      } else if (data is Map && data.containsKey('curriculum')) {
+        parsedSections = data['curriculum']; 
       } else if (data is Map && data.containsKey('sections')) {
         parsedSections = data['sections'];
       } else if (data is Map && data.containsKey('data')) {
@@ -57,8 +60,10 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   void _playFirstAvailableLesson() {
     for (var section in _sections) {
-      for (var lesson in section['lessons']) {
-        if (lesson['lesson_type'] == 'video' || lesson['video_url'] != null) {
+      List items = section['lessons'] ?? section['items'] ?? [];
+      for (var lesson in items) {
+        String vidUrl = lesson['video_url']?.toString() ?? '';
+        if (vidUrl.isNotEmpty) {
           _playLesson(lesson);
           return;
         }
@@ -67,13 +72,20 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   }
 
   void _playLesson(dynamic lesson) {
-    if (lesson['video_url'] == null || lesson['video_url'].toString().isEmpty) return;
+    String vidUrl = lesson['video_url']?.toString() ?? '';
+    if (vidUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('This lesson is locked or has no video attached.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
     
     setState(() {
       _currentLesson = Map<String, dynamic>.from(lesson);
     });
     
-    _initializePlayer(lesson['video_url'].toString());
+    _initializePlayer(vidUrl);
   }
 
   void _initializePlayer(String videoUrl) {
@@ -91,7 +103,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
               looping: false,
               aspectRatio: _videoPlayerController!.value.aspectRatio,
               errorBuilder: (context, errorMessage) {
-                return Center(child: Text('Video format not supported or URL invalid.', style: const TextStyle(color: Colors.white)));
+                return const Center(child: Text('Video format not supported or URL invalid.', style: TextStyle(color: Colors.white)));
               },
             );
           });
@@ -135,7 +147,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
             color: Colors.black,
             child: _chewieController != null 
               ? Chewie(controller: _chewieController!)
-              : const Center(child: Text('Loading video...', style: TextStyle(color: Colors.white))),
+              : Center(
+                  child: Text(
+                    _currentLesson == null ? 'Select a lesson to begin' : 'Loading video...', 
+                    style: const TextStyle(color: Colors.white)
+                  )
+                ),
           ),
           
           // Curriculum List Area
@@ -148,23 +165,27 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                     itemCount: _sections.length,
                     itemBuilder: (context, index) {
                       final section = _sections[index];
+                      // Safely grabs whichever format the DB/Cache provided
+                      List items = section['lessons'] ?? section['items'] ?? [];
+                      
                       return ExpansionTile(
-                        title: Text(section['title'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(section['title'] ?? 'Section', style: const TextStyle(fontWeight: FontWeight.bold)),
                         initiallyExpanded: true,
-                        children: (section['lessons'] as List).map((lesson) {
+                        children: items.map((lesson) {
                           bool isPlaying = _currentLesson?['id'] == lesson['id'];
-                          bool hasVideo = lesson['video_url'] != null && lesson['video_url'].toString().isNotEmpty;
+                          String vidUrl = lesson['video_url']?.toString() ?? '';
+                          bool hasVideo = vidUrl.isNotEmpty;
                           
                           return ListTile(
                             leading: Icon(
-                              isPlaying ? Icons.pause_circle_filled : (hasVideo ? Icons.play_circle_outline : Icons.article),
+                              isPlaying ? Icons.pause_circle_filled : (hasVideo ? Icons.play_circle_outline : Icons.lock_outline),
                               color: isPlaying ? AppTheme.primaryColor : Colors.grey,
                             ),
-                            title: Text(lesson['title'], style: TextStyle(
+                            title: Text(lesson['title'] ?? 'Lesson', style: TextStyle(
                               fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
                               color: isPlaying ? AppTheme.primaryColor : Colors.black87
                             )),
-                            onTap: hasVideo ? () => _playLesson(lesson) : null,
+                            onTap: () => _playLesson(lesson),
                           );
                         }).toList(),
                       );
