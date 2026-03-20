@@ -19,9 +19,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingDashboard = true;
   bool _isLoadingCatalog = true;
   Map<String, dynamic>? _dashboardData;
-  List<CatalogItem> _allCourses = [];
   
-  // Using your exact name as requested
+  // Separated lists for live vs coming soon
+  List<CatalogItem> _activeCourses = [];
+  List<CatalogItem> _comingSoonCourses = [];
+  
   final String _userName = "Osama"; 
 
   @override
@@ -66,17 +68,39 @@ class _HomeScreenState extends State<HomeScreen> {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
           List<dynamic> list = data['data'];
-          List<CatalogItem> parsedItems = [];
+          
+          List<CatalogItem> active = [];
+          List<CatalogItem> coming = [];
+          DateTime now = DateTime.now();
+
           for (var item in list) {
             try {
-              parsedItems.add(CatalogItem.fromJson(item, 'courses'));
+              // 1. Check the database release_date against today's actual date
+              bool isComingSoon = false;
+              if (item['release_date'] != null) {
+                DateTime? release = DateTime.tryParse(item['release_date'].toString());
+                if (release != null && release.isAfter(now)) {
+                  isComingSoon = true;
+                }
+              }
+              
+              // 2. Parse it using your existing model
+              CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
+              
+              // 3. Sort into the correct UI list
+              if (isComingSoon) {
+                coming.add(parsed);
+              } else {
+                active.add(parsed);
+              }
             } catch (e) {
               debugPrint("Parse error: $e");
             }
           }
           if (mounted) {
             setState(() {
-              _allCourses = parsedItems;
+              _activeCourses = active;
+              _comingSoonCourses = coming;
               _isLoadingCatalog = false;
             });
           }
@@ -87,14 +111,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Safely partitions the single catalog list into dynamic horizontal sections
-  List<CatalogItem> _getSubList(int startIndex, int count) {
-    if (_allCourses.isEmpty) return [];
-    int safeStart = startIndex % _allCourses.length;
+  // Safely partitions lists into UI carousels
+  List<CatalogItem> _getSubList(List<CatalogItem> source, int startIndex, int count) {
+    if (source.isEmpty) return [];
+    int safeStart = startIndex % source.length;
     List<CatalogItem> result = [];
     for(int i=0; i<count; i++) {
-      if (i < _allCourses.length) {
-         result.add(_allCourses[(safeStart + i) % _allCourses.length]);
+      if (i < source.length) {
+         result.add(source[(safeStart + i) % source.length]);
       }
     }
     return result;
@@ -105,10 +129,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Kainuwa Academy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text('Kainuwa Academy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(icon: const Icon(Icons.notifications_none), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.notifications_none, color: Colors.white), onPressed: () {}),
         ],
       ),
       body: RefreshIndicator(
@@ -123,15 +148,15 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Hero Header & Wallet
+              // 1. Sleek Header (Wallet Removed)
               _buildHeaderSection(),
               const SizedBox(height: 24),
 
-              // 2. Categories Horizontal Chips
+              // 2. Categories
               _buildCategories(),
               const SizedBox(height: 24),
 
-              // 3. Jump Back In (If user has a pending course)
+              // 3. Jump Back In
               if (_dashboardData?['recent_course'] != null) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.0),
@@ -145,20 +170,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 30),
               ],
 
-              // 4. Dynamic Horizontal Scroll Sections (The "Grid" views)
+              // 4. Dynamic Carousels
               if (_isLoadingCatalog)
                  const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: AppTheme.primaryColor)))
               else ...[
-                _buildHorizontalSection('Featured Courses', _getSubList(0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
+                _buildHorizontalSection('Featured Courses', _getSubList(_activeCourses, 0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
                 const SizedBox(height: 30),
 
-                _buildHorizontalSection('Top Rated Courses', _getSubList(2, 5)),
+                _buildHorizontalSection('Top Rated Courses', _getSubList(_activeCourses, 2, 5)),
                 const SizedBox(height: 30),
 
-                _buildHorizontalSection('Popular Now', _getSubList(1, 4), badgeText: 'HOT', badgeColor: Colors.redAccent),
+                _buildHorizontalSection('Popular Now', _getSubList(_activeCourses, 1, 4), badgeText: 'HOT', badgeColor: Colors.redAccent),
                 const SizedBox(height: 30),
 
-                _buildHorizontalSection('Coming Soon', _getSubList(3, 2), isComingSoon: true),
+                // Automatically populates from DB based on release_date!
+                if (_comingSoonCourses.isNotEmpty)
+                  _buildHorizontalSection('Coming Soon', _comingSoonCourses, isComingSoon: true),
               ],
             ],
           ),
@@ -169,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeaderSection() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       decoration: const BoxDecoration(
         color: AppTheme.primaryColor,
         borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
@@ -177,42 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Welcome Back, $_userName! 👋', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.account_balance_wallet, color: AppTheme.primaryColor, size: 20),
-                        SizedBox(width: 8),
-                        Text('My Wallet', style: TextStyle(color: Colors.black54, fontSize: 14, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _isLoadingDashboard 
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
-                      : Text('${_dashboardData?['wallet_balance'] ?? '0'} KAIDA', style: const TextStyle(color: Colors.black87, fontSize: 26, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Top Up', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
-                )
-              ],
-            ),
-          ),
+          Text('Welcome Back, $_userName', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 8),
+          const Text('What would you like to learn today?', style: TextStyle(fontSize: 14, color: Colors.white70)),
         ],
       ),
     );
@@ -264,15 +259,21 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const Text('See All', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+              InkWell(
+                onTap: () {
+                  // Direct navigation to the Course Tab correctly
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CatalogScreen(actionType: 'courses', title: 'Explore Courses')));
+                },
+                child: const Text('See All', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 250, // Height of the horizontal scroll area
+          height: 250, 
           child: ListView.builder(
-            scrollDirection: Axis.horizontal, // Enables left/right scrolling
+            scrollDirection: Axis.horizontal, 
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: items.length,
             itemBuilder: (context, index) {
@@ -286,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHorizontalCard(CatalogItem item, String? badgeText, Color? badgeColor, bool isComingSoon) {
     return Container(
-      width: 200, // Width of each individual card
+      width: 200, 
       margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white,
