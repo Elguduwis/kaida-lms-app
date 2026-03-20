@@ -6,14 +6,26 @@ import '../config/api_config.dart';
 class CoursePlayerService {
   Future<Map<String, dynamic>?> getCourseDetails(int courseId) async {
     final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
     final cacheKey = 'course_curriculum_$courseId';
 
+    // If there is no user logged in, we can't fetch secure videos
+    if (userId == null) return null;
+
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.courseLessons}?course_id=$courseId')).timeout(const Duration(seconds: 10));
+      // FIX: Changed back to a POST request and securely passing the user_id
+      final response = await http.post(
+        Uri.parse(ApiConfig.courseLessons),
+        body: {
+          'course_id': courseId.toString(),
+          'user_id': userId.toString(),
+        }
+      ).timeout(const Duration(seconds: 10));
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          // SAVE TO CACHE FOR OFFLINE DOWNLOAD VIEWING!
+          // SAVE TO CACHE FOR OFFLINE DOWNLOAD VIEWING
           prefs.setString(cacheKey, json.encode(data['data']));
           return data['data'];
         }
