@@ -19,6 +19,8 @@ dependencies:
   wakelock_plus: ^1.2.8
   webview_flutter: ^4.4.2
   cached_network_image: ^3.4.1
+  image_picker: ^1.0.7
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
