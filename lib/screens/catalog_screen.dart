@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'item_details_screen.dart';
 
 class CatalogItem {
+  final int id;
   final String slug;
   final String title;
   final String thumbnailUrl;
@@ -18,7 +21,7 @@ class CatalogItem {
   final DateTime? releaseDate;
 
   CatalogItem({
-    required this.slug, required this.title, required this.thumbnailUrl,
+    required this.id, required this.slug, required this.title, required this.thumbnailUrl,
     required this.instructorName, required this.price, required this.discountPrice,
     required this.isFree, required this.type, required this.categoryName,
     this.productType = '', this.releaseDate,
@@ -41,6 +44,7 @@ class CatalogItem {
     }
 
     return CatalogItem(
+      id: int.tryParse(json['id'].toString()) ?? 0,
       slug: json['slug']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Untitled',
       thumbnailUrl: rawThumb,
@@ -70,8 +74,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
   bool _isLoading = true;
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
+  Set<int> _wishlistedIds = {};
   
-  // Filtering states
   String _searchQuery = '';
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
@@ -84,10 +88,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   Future<void> _fetchData() async {
     try {
-      final response = await http.get(
-        Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'),
-      );
-
+      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
@@ -133,13 +134,40 @@ class _CatalogScreenState extends State<CatalogScreen> {
     });
   }
 
+  Future<void> _toggleWishlist(CatalogItem item) async {
+    setState(() {
+      if (_wishlistedIds.contains(item.id)) {
+        _wishlistedIds.remove(item.id);
+      } else {
+        _wishlistedIds.add(item.id);
+      }
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+      if (userId == null) return;
+
+      await http.post(
+        Uri.parse('https://academy.kainuwa.africa/api/toggle_wishlist.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'user_id': userId,
+          'item_id': item.id,
+          'item_type': widget.actionType == 'courses' ? 'course' : 'product'
+        }),
+      );
+    } catch (e) {
+      debugPrint("Wishlist error: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       body: CustomScrollView(
         slivers: [
-          // 1. Sleek Modern App Bar
           SliverAppBar(
             backgroundColor: AppTheme.primaryColor,
             elevation: 0,
@@ -148,12 +176,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
             title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
             centerTitle: true,
           ),
-
-          // 2. Search Bar Section
           SliverToBoxAdapter(
             child: Container(
               color: AppTheme.primaryColor,
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -176,12 +202,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
           ),
-
-          // 3. Dynamic Interactive Category Pills
           if (!_isLoading && _categories.length > 1)
             SliverToBoxAdapter(
-              child: Transform.translate(
-                offset: const Offset(0, -15),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 8), // FIXED: No more clipping!
                 child: SizedBox(
                   height: 40,
                   child: ListView.builder(
@@ -221,12 +245,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             ),
-
-          // 4. Loading State or Empty State
           if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
-            )
+            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)))
           else if (_filteredItems.isEmpty)
             SliverFillRemaining(
               child: Center(
@@ -240,8 +260,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             )
-          
-          // 5. The Professional Grid
           else
             SliverPadding(
               padding: const EdgeInsets.all(16),
@@ -286,7 +304,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image Stack
             Expanded(
               flex: 5,
               child: Stack(
@@ -295,8 +312,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   item.thumbnailUrl.isNotEmpty
                       ? Image.network(item.thumbnailUrl, fit: BoxFit.cover)
                       : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
-                  
-                  // Category Overlay Tag
                   Positioned(
                     top: 8, left: 8,
                     child: Container(
@@ -305,8 +320,22 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     ),
                   ),
-
-                  // Coming Soon Overlay
+                  // WISHLIST HEART ICON
+                  Positioned(
+                    top: 8, right: 8,
+                    child: GestureDetector(
+                      onTap: () => _toggleWishlist(item),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: Icon(
+                          _wishlistedIds.contains(item.id) ? Icons.favorite : Icons.favorite_border,
+                          color: _wishlistedIds.contains(item.id) ? Colors.red : Colors.grey,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
                   if (item.isComingSoon)
                     Container(
                       color: Colors.black.withOpacity(0.6),
@@ -315,8 +344,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ],
               ),
             ),
-            
-            // Text Content Section
             Expanded(
               flex: 5,
               child: Padding(
@@ -351,12 +378,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _buildPrice(CatalogItem item) {
-    if (item.isComingSoon) {
-      return const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5));
-    }
-    if (item.isFree || (item.price == 0 && item.discountPrice == 0)) {
-      return const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14));
-    }
+    if (item.isComingSoon) return const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
+    if (item.isFree || (item.price == 0 && item.discountPrice == 0)) return const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14));
+    
     if (item.discountPrice > 0 && item.discountPrice < item.price) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
