@@ -14,14 +14,20 @@ class CatalogItem {
   final bool isFree;
   final String type; 
   final String categoryName;
-  final String productType; // NEW: Captures physical vs digital
+  final String productType;
+  final DateTime? releaseDate;
 
   CatalogItem({
     required this.slug, required this.title, required this.thumbnailUrl,
     required this.instructorName, required this.price, required this.discountPrice,
     required this.isFree, required this.type, required this.categoryName,
-    this.productType = '',
+    this.productType = '', this.releaseDate,
   });
+
+  bool get isComingSoon {
+    if (releaseDate == null) return false;
+    return releaseDate!.isAfter(DateTime.now());
+  }
 
   factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
     String rawThumb = json['thumbnail_url']?.toString() ?? '';
@@ -29,6 +35,11 @@ class CatalogItem {
       rawThumb = 'https://academy.kainuwa.africa/$rawThumb';
     }
     
+    DateTime? parsedDate;
+    if (json['release_date'] != null) {
+      parsedDate = DateTime.tryParse(json['release_date'].toString());
+    }
+
     return CatalogItem(
       slug: json['slug']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Untitled',
@@ -36,10 +47,11 @@ class CatalogItem {
       instructorName: json['instructor_name']?.toString() ?? json['username']?.toString() ?? 'Kainuwa',
       price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
       discountPrice: double.tryParse(json['discount_price']?.toString() ?? '0') ?? 0.0,
-      isFree: json['is_free']?.toString() == '1',
-      type: itemType == 'courses' ? 'course' : 'product',
+      isFree: (json['is_free']?.toString() == '1'),
+      type: itemType,
       categoryName: json['category_name']?.toString() ?? 'General',
-      productType: json['product_type']?.toString() ?? 'digital', // Reads from your DB!
+      productType: json['product_type']?.toString() ?? '',
+      releaseDate: parsedDate,
     );
   }
 }
@@ -56,83 +68,64 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   bool _isLoading = true;
-  String _errorMessage = ''; 
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
   
-  final TextEditingController _searchController = TextEditingController();
+  // Filtering states
   String _searchQuery = '';
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
 
   @override
   void initState() {
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
     super.initState();
-    _fetchCatalog();
+    _fetchData();
   }
 
-  Future<void> _fetchCatalog() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-    
+  Future<void> _fetchData() async {
     try {
       final response = await http.get(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'),
       );
 
       if (response.statusCode == 200) {
-        try {
-          final data = json.decode(response.body);
-          if (data['status'] == 'success') {
-            List<dynamic> list = data['data'];
-            List<CatalogItem> parsedItems = [];
-            Set<String> uniqueCategories = {'All'};
-            
-            for (var item in list) {
-              try {
-                var parsed = CatalogItem.fromJson(item, widget.actionType);
-                parsedItems.add(parsed);
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          List<dynamic> list = data['data'];
+          List<CatalogItem> parsedItems = [];
+          Set<String> uniqueCategories = {'All'};
+
+          for (var item in list) {
+            try {
+              final parsed = CatalogItem.fromJson(item, widget.actionType);
+              parsedItems.add(parsed);
+              if (parsed.categoryName.isNotEmpty && parsed.categoryName != 'General') {
                 uniqueCategories.add(parsed.categoryName);
-              } catch (e) {
-                debugPrint("Parse error on single item: $e");
               }
+            } catch (e) {
+              debugPrint("Parse error: $e");
             }
-            
-            if (mounted) {
-              setState(() {
-                _allItems = parsedItems;
-                _categories = uniqueCategories.toList();
-                _applyFilters();
-              });
-            }
-          } else {
-            if (mounted) setState(() => _errorMessage = data['message'] ?? 'API Error');
           }
-        } catch (e) {
-          if (mounted) setState(() => _errorMessage = 'JSON Parse Error. Server sent:\n${response.body}');
+
+          if (mounted) {
+            setState(() {
+              _allItems = parsedItems;
+              _filteredItems = parsedItems;
+              _categories = uniqueCategories.toList();
+              _isLoading = false;
+            });
+          }
         }
-      } else {
-        if (mounted) setState(() => _errorMessage = 'Server Status Error: ${response.statusCode}');
       }
     } catch (e) {
-      if (mounted) setState(() => _errorMessage = 'Network Connection Error: $e');
-    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _applyFilters() {
+  void _filterItems() {
     setState(() {
       _filteredItems = _allItems.where((item) {
-        final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+        final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
                               item.instructorName.toLowerCase().contains(_searchQuery.toLowerCase());
         final matchesCategory = _selectedCategory == 'All' || item.categoryName == _selectedCategory;
         return matchesSearch && matchesCategory;
@@ -144,144 +137,190 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: AppTheme.primaryColor,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                _searchQuery = value;
-                _applyFilters();
-              },
-              decoration: InputDecoration(
-                hintText: 'Search...',
-                suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.grey), onPressed: () { _searchController.clear(); setState(() { _searchQuery = ''; _applyFilters(); }); }) : null,
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+      body: CustomScrollView(
+        slivers: [
+          // 1. Sleek Modern App Bar
+          SliverAppBar(
+            backgroundColor: AppTheme.primaryColor,
+            elevation: 0,
+            pinned: true,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+            centerTitle: true,
+          ),
+
+          // 2. Search Bar Section
+          SliverToBoxAdapter(
+            child: Container(
+              color: AppTheme.primaryColor,
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
+                ),
+                child: TextField(
+                  onChanged: (value) {
+                    _searchQuery = value;
+                    _filterItems();
+                  },
+                  decoration: InputDecoration(
+                    hintText: widget.actionType == 'courses' ? 'Search courses, mentors...' : 'Search products...',
+                    hintStyle: TextStyle(color: Colors.grey.shade400),
+                    prefixIcon: const Icon(Icons.search, color: AppTheme.primaryColor),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
               ),
             ),
           ),
-          
-          if (_categories.length > 1)
-            Container(
-              height: 50,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  final isSelected = cat == _selectedCategory;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87)),
-                      selected: isSelected,
-                      selectedColor: AppTheme.primaryColor,
-                      backgroundColor: Colors.white,
-                      onSelected: (selected) {
-                        setState(() {
-                          _selectedCategory = cat;
-                          _applyFilters();
-                        });
-                      },
-                    ),
-                  );
-                },
+
+          // 3. Dynamic Interactive Category Pills
+          if (!_isLoading && _categories.length > 1)
+            SliverToBoxAdapter(
+              child: Transform.translate(
+                offset: const Offset(0, -15),
+                child: SizedBox(
+                  height: 40,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      final category = _categories[index];
+                      final isSelected = _selectedCategory == category;
+                      return GestureDetector(
+                        onTap: () {
+                          _selectedCategory = category;
+                          _filterItems();
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.primaryColor : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300),
+                            boxShadow: isSelected ? [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
+                          ),
+                          child: Text(
+                            category,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.grey.shade700,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
 
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-              : _errorMessage.isNotEmpty
-                  ? _buildErrorDisplay() 
-                  : RefreshIndicator(
-                      color: AppTheme.primaryColor,
-                      onRefresh: _fetchCatalog,
-                      child: _filteredItems.isEmpty
-                        ? ListView(children: const [SizedBox(height: 100), Center(child: Text('No results found.'))]) 
-                        : GridView.builder(
-                            padding: const EdgeInsets.all(16),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              childAspectRatio: 0.70,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                            ),
-                            itemCount: _filteredItems.length,
-                            itemBuilder: (context, index) {
-                              final item = _filteredItems[index];
-                              return _buildGridCard(item);
-                            },
-                          ),
-                    ),
-          ),
+          // 4. Loading State or Empty State
+          if (_isLoading)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+            )
+          else if (_filteredItems.isEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.search_off, size: 80, color: Colors.grey.shade300),
+                    const SizedBox(height: 16),
+                    Text('No results found.', style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            )
+          
+          // 5. The Professional Grid
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildModernCard(_filteredItems[index]),
+                  childCount: _filteredItems.length,
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
-  
-  Widget _buildErrorDisplay() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 60),
-            const SizedBox(height: 16),
-            const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(_errorMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _fetchCatalog,
-              child: const Text('Try Again'),
-            )
-          ],
-        ),
+
+  Widget _buildModernCard(CatalogItem item) {
+    String subtitleText = widget.actionType == 'products' 
+        ? (item.productType == 'digital' ? 'Digital Download' : 'Physical Item')
+        : item.instructorName;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 5))],
       ),
-    );
-  }
-
-  Widget _buildGridCard(CatalogItem item) {
-    // DYNAMIC SUBTITLE BASED ON DB PRODUCT TYPE
-    String subtitleText = item.type == 'course' 
-        ? item.instructorName 
-        : (item.productType.toLowerCase() == 'physical' ? 'Physical Product' : 'Digital Product');
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
+          if (!item.isComingSoon) {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This item is launching soon!')));
+          }
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Image Stack
             Expanded(
               flex: 5,
-              child: item.thumbnailUrl.isNotEmpty
-                ? Image.network(item.thumbnailUrl, width: double.infinity, fit: BoxFit.cover)
-                : Container(width: double.infinity, color: AppTheme.primaryColor, child: const Icon(Icons.image, color: Colors.white)),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  item.thumbnailUrl.isNotEmpty
+                      ? Image.network(item.thumbnailUrl, fit: BoxFit.cover)
+                      : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
+                  
+                  // Category Overlay Tag
+                  Positioned(
+                    top: 8, left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+                      child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    ),
+                  ),
+
+                  // Coming Soon Overlay
+                  if (item.isComingSoon)
+                    Container(
+                      color: Colors.black.withOpacity(0.6),
+                      child: const Center(child: Icon(Icons.lock_clock, color: Colors.white, size: 30)),
+                    )
+                ],
+              ),
             ),
+            
+            // Text Content Section
             Expanded(
-              flex: 6,
+              flex: 5,
               child: Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -289,9 +328,15 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 4),
-                        Text(subtitleText, style: TextStyle(color: Colors.grey[600], fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(widget.actionType == 'courses' ? Icons.person : Icons.inventory_2, size: 12, color: Colors.grey.shade500),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text(subtitleText, style: TextStyle(color: Colors.grey.shade600, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          ],
+                        ),
                       ],
                     ),
                     _buildPrice(item),
@@ -306,6 +351,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _buildPrice(CatalogItem item) {
+    if (item.isComingSoon) {
+      return const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5));
+    }
     if (item.isFree || (item.price == 0 && item.discountPrice == 0)) {
       return const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14));
     }
@@ -313,11 +361,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryColor)),
-          Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey, fontSize: 10)),
+          Text('₦${item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w600)),
+          Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryColor)),
         ],
       );
     }
-    return Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryColor));
+    return Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryColor));
   }
 }
