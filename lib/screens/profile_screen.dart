@@ -8,6 +8,7 @@ import '../config/app_theme.dart';
 import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
+import 'downloads_screen.dart';
   const ProfileScreen({Key? key}) : super(key: key);
 
   @override
@@ -70,18 +71,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openWebDashboard(String redirectPath, String title) {
+  void _openWebDashboard(String redirectPath, String title) async {
     if (_userId == null) return;
     
     // Uses the secure auto-login bridge to load the correct web path
     final authUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$redirectPath';
     
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => WebDashboardScreen(url: authUrl, title: title),
-      ),
+    await Navigator.push(
     );
+    if (mounted) _fetchProfileData();
   }
 
   @override
@@ -159,6 +157,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 10),
                     
                     if (isInstructor)
+                  _buildMenuCard(
+                    title: 'My Digital Downloads',
+                    subtitle: 'Access your purchased ebooks and files',
+                    icon: Icons.download,
+                    color: Colors.green,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
+                  ),
+                  const SizedBox(height: 10),
+
                       _buildMenuCard(
                         title: 'Instructor Dashboard',
                         subtitle: 'Manage courses, lessons, and students',
@@ -170,6 +177,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     if (isInstructor && isAffiliate) const SizedBox(height: 10),
                     
                     if (isAffiliate)
+                  _buildMenuCard(
+                    title: 'My Digital Downloads',
+                    subtitle: 'Access your purchased ebooks and files',
+                    icon: Icons.download,
+                    color: Colors.green,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
+                  ),
+                  const SizedBox(height: 10),
+
                       _buildMenuCard(
                         title: 'Affiliate Dashboard',
                         subtitle: 'Track your referrals and payouts',
@@ -192,6 +208,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Text('Account', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
                   const SizedBox(height: 10),
                   
+                  _buildMenuCard(
+                    title: 'My Digital Downloads',
+                    subtitle: 'Access your purchased ebooks and files',
+                    icon: Icons.download,
+                    color: Colors.green,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
+                  ),
+                  const SizedBox(height: 10),
+
                   _buildMenuCard(
                     title: 'Profile Settings',
                     subtitle: 'Update your password, avatar, and details',
@@ -241,6 +266,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+                  _buildMenuCard(
+                    title: 'My Digital Downloads',
+                    subtitle: 'Access your purchased ebooks and files',
+                    icon: Icons.download,
+                    color: Colors.green,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen())),
+                  ),
+                  const SizedBox(height: 10),
 
   Widget _buildMenuCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
     return Card(

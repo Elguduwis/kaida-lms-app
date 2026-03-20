@@ -14,11 +14,13 @@ class CatalogItem {
   final bool isFree;
   final String type; 
   final String categoryName;
+  final String productType; // NEW: Captures physical vs digital
 
   CatalogItem({
     required this.slug, required this.title, required this.thumbnailUrl,
     required this.instructorName, required this.price, required this.discountPrice,
-    required this.isFree, required this.type, required this.categoryName
+    required this.isFree, required this.type, required this.categoryName,
+    this.productType = '',
   });
 
   factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
@@ -37,6 +39,7 @@ class CatalogItem {
       isFree: json['is_free']?.toString() == '1',
       type: itemType == 'courses' ? 'course' : 'product',
       categoryName: json['category_name']?.toString() ?? 'General',
+      productType: json['product_type']?.toString() ?? 'digital', // Reads from your DB!
     );
   }
 }
@@ -53,16 +56,23 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   bool _isLoading = true;
-  String _errorMessage = ''; // NEW: We will store exact errors here!
+  String _errorMessage = ''; 
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
   
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
 
   @override
   void initState() {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
     super.initState();
     _fetchCatalog();
   }
@@ -104,11 +114,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
               });
             }
           } else {
-            // Server returned a clean error message
             if (mounted) setState(() => _errorMessage = data['message'] ?? 'API Error');
           }
         } catch (e) {
-          // JSON Decoding failed (usually a PHP error outputted HTML)
           if (mounted) setState(() => _errorMessage = 'JSON Parse Error. Server sent:\n${response.body}');
         }
       } else {
@@ -146,12 +154,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
             padding: const EdgeInsets.all(16),
             color: AppTheme.primaryColor,
             child: TextField(
+              controller: _searchController,
               onChanged: (value) {
                 _searchQuery = value;
                 _applyFilters();
               },
               decoration: InputDecoration(
                 hintText: 'Search...',
+                suffixIcon: _searchQuery.isNotEmpty ? IconButton(icon: const Icon(Icons.clear, color: Colors.grey), onPressed: () { _searchController.clear(); setState(() { _searchQuery = ''; _applyFilters(); }); }) : null,
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: Colors.white,
@@ -195,7 +205,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
               : _errorMessage.isNotEmpty
-                  ? _buildErrorDisplay() // Show the exact error if one exists!
+                  ? _buildErrorDisplay() 
                   : RefreshIndicator(
                       color: AppTheme.primaryColor,
                       onRefresh: _fetchCatalog,
@@ -222,7 +232,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
     );
   }
   
-  // NEW: A visual way to see exact errors
   Widget _buildErrorDisplay() {
     return Center(
       child: Padding(
@@ -247,6 +256,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _buildGridCard(CatalogItem item) {
+    // DYNAMIC SUBTITLE BASED ON DB PRODUCT TYPE
+    String subtitleText = item.type == 'course' 
+        ? item.instructorName 
+        : (item.productType.toLowerCase() == 'physical' ? 'Physical Product' : 'Digital Product');
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -277,7 +291,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       children: [
                         Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        Text(item.type == 'course' ? item.instructorName : 'Digital Product', style: TextStyle(color: Colors.grey[600], fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(subtitleText, style: TextStyle(color: Colors.grey[600], fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ],
                     ),
                     _buildPrice(item),
