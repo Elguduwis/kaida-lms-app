@@ -53,10 +53,10 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   bool _isLoading = true;
+  String _errorMessage = ''; // NEW: We will store exact errors here!
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
   
-  // Filtering States
   String _searchQuery = '';
   String _selectedCategory = 'All';
   List<String> _categories = ['All'];
@@ -68,43 +68,55 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Future<void> _fetchCatalog() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+    
     try {
       final response = await http.get(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'),
       );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          List<dynamic> list = data['data'];
-          
-          List<CatalogItem> parsedItems = [];
-          Set<String> uniqueCategories = {'All'};
-          
-          for (var item in list) {
-            try {
-              var parsed = CatalogItem.fromJson(item, widget.actionType);
-              parsedItems.add(parsed);
-              uniqueCategories.add(parsed.categoryName);
-            } catch (e) {
-              debugPrint("Error parsing item: $e");
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] == 'success') {
+            List<dynamic> list = data['data'];
+            List<CatalogItem> parsedItems = [];
+            Set<String> uniqueCategories = {'All'};
+            
+            for (var item in list) {
+              try {
+                var parsed = CatalogItem.fromJson(item, widget.actionType);
+                parsedItems.add(parsed);
+                uniqueCategories.add(parsed.categoryName);
+              } catch (e) {
+                debugPrint("Parse error on single item: $e");
+              }
             }
+            
+            if (mounted) {
+              setState(() {
+                _allItems = parsedItems;
+                _categories = uniqueCategories.toList();
+                _applyFilters();
+              });
+            }
+          } else {
+            // Server returned a clean error message
+            if (mounted) setState(() => _errorMessage = data['message'] ?? 'API Error');
           }
-          
-          if (mounted) {
-            setState(() {
-              _allItems = parsedItems;
-              _categories = uniqueCategories.toList();
-              _applyFilters();
-            });
-          }
+        } catch (e) {
+          // JSON Decoding failed (usually a PHP error outputted HTML)
+          if (mounted) setState(() => _errorMessage = 'JSON Parse Error. Server sent:\n${response.body}');
         }
+      } else {
+        if (mounted) setState(() => _errorMessage = 'Server Status Error: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint("API Error: $e");
+      if (mounted) setState(() => _errorMessage = 'Network Connection Error: $e');
     } finally {
-      // THIS PREVENTS INFINITE LOADING REGARDLESS OF ERRORS
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -130,7 +142,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
       ),
       body: Column(
         children: [
-          // 1. Search Bar
           Container(
             padding: const EdgeInsets.all(16),
             color: AppTheme.primaryColor,
@@ -150,7 +161,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ),
           ),
           
-          // 2. Category Filter Chips
           if (_categories.length > 1)
             Container(
               height: 50,
@@ -181,32 +191,57 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
 
-          // 3. Grid View Content
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-              : RefreshIndicator(
-                  color: AppTheme.primaryColor,
-                  onRefresh: _fetchCatalog,
-                  child: _filteredItems.isEmpty
-                    ? ListView(children: const [SizedBox(height: 100), Center(child: Text('No results found.'))]) // ListView allows pull-to-refresh even when empty
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 0.70, // Adjusts height of the cards
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: _filteredItems.length,
-                        itemBuilder: (context, index) {
-                          final item = _filteredItems[index];
-                          return _buildGridCard(item);
-                        },
-                      ),
-                ),
+              : _errorMessage.isNotEmpty
+                  ? _buildErrorDisplay() // Show the exact error if one exists!
+                  : RefreshIndicator(
+                      color: AppTheme.primaryColor,
+                      onRefresh: _fetchCatalog,
+                      child: _filteredItems.isEmpty
+                        ? ListView(children: const [SizedBox(height: 100), Center(child: Text('No results found.'))]) 
+                        : GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 0.70,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                            itemCount: _filteredItems.length,
+                            itemBuilder: (context, index) {
+                              final item = _filteredItems[index];
+                              return _buildGridCard(item);
+                            },
+                          ),
+                    ),
           ),
         ],
+      ),
+    );
+  }
+  
+  // NEW: A visual way to see exact errors
+  Widget _buildErrorDisplay() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 60),
+            const SizedBox(height: 16),
+            const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(_errorMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _fetchCatalog,
+              child: const Text('Try Again'),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -223,15 +258,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image Area
             Expanded(
               flex: 5,
               child: item.thumbnailUrl.isNotEmpty
                 ? Image.network(item.thumbnailUrl, width: double.infinity, fit: BoxFit.cover)
                 : Container(width: double.infinity, color: AppTheme.primaryColor, child: const Icon(Icons.image, color: Colors.white)),
             ),
-            
-            // Text Area
             Expanded(
               flex: 6,
               child: Padding(
@@ -243,19 +275,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          item.title, 
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), 
-                          maxLines: 2, 
-                          overflow: TextOverflow.ellipsis
-                        ),
+                        Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        Text(
-                          item.type == 'course' ? item.instructorName : 'Digital Product', 
-                          style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        Text(item.type == 'course' ? item.instructorName : 'Digital Product', style: TextStyle(color: Colors.grey[600], fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ],
                     ),
                     _buildPrice(item),
