@@ -2,7 +2,6 @@ plugins {
     id "com.android.application"
     id "kotlin-android"
     id "dev.flutter.flutter-gradle-plugin"
-    // Firebase Google Services Plugin
     id "com.google.gms.google-services"
 }
 
@@ -25,7 +24,7 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace "com.kainuwa.app"
+    namespace "com.example.kaida_app"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -43,7 +42,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.kainuwa.app"
+        applicationId "com.example.kaida_app"
         minSdk 21
         targetSdk flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
