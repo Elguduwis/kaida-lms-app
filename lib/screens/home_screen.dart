@@ -20,8 +20,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingCatalog = true;
   Map<String, dynamic>? _dashboardData;
   
+  // Separated lists for live vs coming soon
   List<CatalogItem> _activeCourses = [];
-  String _userName = "Osama"; // You can later sync this dynamically from SharedPreferences
+  List<CatalogItem> _comingSoonCourses = [];
+  
+  final String _userName = "Osama"; 
 
   @override
   void initState() {
@@ -57,18 +60,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchCatalogData() async {
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.courses}?action=courses'));
+      final response = await http.get(
+        Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'),
+      );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success' && mounted) {
-          final List<dynamic> coursesJson = data['data'];
-          setState(() {
-            _activeCourses = coursesJson
-                .map((json) => CatalogItem.fromJson(json, 'courses'))
-                .where((item) => !item.isComingSoon)
-                .toList();
-            _isLoadingCatalog = false;
-          });
+        if (data['status'] == 'success') {
+          List<dynamic> list = data['data'];
+          
+          List<CatalogItem> active = [];
+          List<CatalogItem> coming = [];
+          DateTime now = DateTime.now();
+
+          for (var item in list) {
+            try {
+              // 1. Check the database release_date against today's actual date
+              bool isComingSoon = false;
+              if (item['release_date'] != null) {
+                DateTime? release = DateTime.tryParse(item['release_date'].toString());
+                if (release != null && release.isAfter(now)) {
+                  isComingSoon = true;
+                }
+              }
+              
+              // 2. Parse it using your existing model
+              CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
+              
+              // 3. Sort into the correct UI list
+              if (isComingSoon) {
+                coming.add(parsed);
+              } else {
+                active.add(parsed);
+              }
+            } catch (e) {
+              debugPrint("Parse error: $e");
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _activeCourses = active;
+              _comingSoonCourses = coming;
+              _isLoadingCatalog = false;
+            });
+          }
         }
       }
     } catch (e) {
@@ -76,27 +111,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Safely partitions lists into UI carousels
+  List<CatalogItem> _getSubList(List<CatalogItem> source, int startIndex, int count) {
+    if (source.isEmpty) return [];
+    int safeStart = startIndex % source.length;
+    List<CatalogItem> result = [];
+    for(int i=0; i<count; i++) {
+      if (i < source.length) {
+         result.add(source[(safeStart + i) % source.length]);
+      }
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 1. Detect if we are currently in Dark Mode
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // 2. Define dynamic text colors based on the mode
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final subtitleColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-
     return Scaffold(
-      // The Scaffold background color is now controlled automatically by app_theme.dart!
+      // Let the theme dictate the scaffold background instead of hardcoding it
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Let the scaffold color show through
+        backgroundColor: AppTheme.primaryColor,
+        title: const Text('Kainuwa Academy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Hello, $_userName 👋', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
-            Text('Ready to learn something new today?', style: TextStyle(color: subtitleColor, fontSize: 12)),
-          ],
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(icon: const Icon(Icons.notifications_none, color: Colors.white), onPressed: () {}),
+        ],
       ),
       body: RefreshIndicator(
         color: AppTheme.primaryColor,
@@ -106,37 +145,49 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.only(bottom: 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildStatsCard(),
+              // 1. Sleek Header (Wallet Removed)
+              _buildHeaderSection(),
               const SizedBox(height: 24),
-              
-              if (_dashboardData != null && _dashboardData!['recent_course'] != null) ...[
-                Text('Continue Learning', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
+
+              // 2. Categories
+              _buildCategories(),
+              const SizedBox(height: 24),
+
+              // 3. Jump Back In
+              if (_dashboardData?['recent_course'] != null) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text('Jump Back In', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
                 const SizedBox(height: 12),
-                _buildRecentCourseCard(_dashboardData!['recent_course'], isDark),
-                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: _buildRecentCourseCard(_dashboardData!['recent_course']),
+                ),
+                const SizedBox(height: 30),
               ],
-              
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Recommended for you', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)),
-                  TextButton(
-                    onPressed: () {
-                      // Handled by BottomNavigationBar natively
-                    },
-                    child: const Text('See All', style: TextStyle(color: AppTheme.primaryColor)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              
-              _isLoadingCatalog
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-                  : _buildRecommendedCourses(isDark, textColor),
+
+              // 4. Dynamic Carousels
+              if (_isLoadingCatalog)
+                 const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: AppTheme.primaryColor)))
+              else ...[
+                _buildHorizontalSection('Featured Courses', _getSubList(_activeCourses, 0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
+                const SizedBox(height: 30),
+
+                _buildHorizontalSection('Top Rated Courses', _getSubList(_activeCourses, 2, 5)),
+                const SizedBox(height: 30),
+
+                _buildHorizontalSection('Popular Now', _getSubList(_activeCourses, 1, 4), badgeText: 'HOT', badgeColor: Colors.redAccent),
+                const SizedBox(height: 30),
+
+                // Automatically populates from DB based on release_date!
+                if (_comingSoonCourses.isNotEmpty)
+                  _buildHorizontalSection('Coming Soon', _comingSoonCourses, isComingSoon: true),
+              ],
             ],
           ),
         ),
@@ -144,62 +195,226 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatsCard() {
-    if (_isLoadingDashboard) return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
-    
-    final balance = _dashboardData?['wallet_balance']?.toString() ?? '0.00';
-    final enrolled = _dashboardData?['total_enrolled']?.toString() ?? '0';
-    final completed = _dashboardData?['total_completed']?.toString() ?? '0';
-
+  Widget _buildHeaderSection() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.primaryColor, // Keeps its vibrant purple branding in both modes
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: AppTheme.primaryColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
-        ],
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      decoration: const BoxDecoration(
+        color: AppTheme.primaryColor,
+        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('KAIDA Wallet Balance', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          Text('Welcome Back, $_userName', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 8),
-          Text('₦$balance', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatItem('Enrolled', enrolled),
-              _buildStatItem('Completed', completed),
-            ],
-          ),
+          const Text('What would you like to learn today?', style: TextStyle(fontSize: 14, color: Colors.white70)),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  Widget _buildCategories() {
+    final categories = ['Development', 'Design', 'Business', 'Marketing', 'Photography'];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0),
+          child: Text('Top Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 40,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: categories.length,
+            itemBuilder: (context, index) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  // Dynamic background and border based on theme
+                  color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+                ),
+                child: Text(
+                  categories[index], 
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.grey.shade800, 
+                    fontWeight: FontWeight.w600
+                  )
+                ),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildRecentCourseCard(Map<String, dynamic> course, bool isDark) {
+  Widget _buildHorizontalSection(String title, List<CatalogItem> items, {String? badgeText, Color? badgeColor, bool isComingSoon = false}) {
+    if (items.isEmpty) return const SizedBox();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              InkWell(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CatalogScreen(actionType: 'courses', title: 'Explore Courses')));
+                },
+                child: const Text('See All', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 250, 
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal, 
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              return _buildHorizontalCard(items[index], badgeText, badgeColor, isComingSoon);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHorizontalCard(CatalogItem item, String? badgeText, Color? badgeColor, bool isComingSoon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: 200, 
+      margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        // Dynamic card background color
+        color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black54 : Colors.grey.withOpacity(0.15), 
+            blurRadius: 8, 
+            offset: const Offset(0, 4)
+          )
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          if (!isComingSoon) {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This course is launching soon!')));
+          }
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                item.thumbnailUrl.isNotEmpty
+                    ? Image.network(item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
+                    : Container(height: 110, color: AppTheme.primaryColor, child: const Icon(Icons.school, size: 40, color: Colors.white)),
+                if (badgeText != null)
+                  Positioned(
+                    top: 8, left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(8)),
+                      child: Text(badgeText, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                if (isComingSoon)
+                  Container(
+                    height: 110, width: double.infinity,
+                    color: Colors.black.withOpacity(0.6),
+                    child: const Center(child: Icon(Icons.lock_clock, color: Colors.white, size: 30)),
+                  )
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  // Removed hardcoded text color so it adapts to theme
+                  Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.person, size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.instructorName, 
+                          // Dynamic gray text
+                          style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey[600], fontSize: 11), 
+                          maxLines: 1, 
+                          overflow: TextOverflow.ellipsis
+                        )
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildPriceDisplay(item, isComingSoon, isDark),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPriceDisplay(CatalogItem item, bool isComingSoon, bool isDark) {
+    if (isComingSoon) return const Text('Coming Soon', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13));
+    
+    if (item.isFree || (item.price == 0 && item.discountPrice == 0)) {
+      return const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13));
+    }
+    if (item.discountPrice > 0 && item.discountPrice < item.price) {
+      return Row(
+        children: [
+          Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryColor)),
+          const SizedBox(width: 4),
+          Text(
+            '₦${item.price.toStringAsFixed(0)}', 
+            style: TextStyle(decoration: TextDecoration.lineThrough, color: isDark ? Colors.grey.shade400 : Colors.grey, fontSize: 10)
+          ),
+        ],
+      );
+    }
+    return Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.primaryColor));
+  }
+
+  Widget _buildRecentCourseCard(Map<String, dynamic> course) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String rawThumb = course['thumbnail_url']?.toString() ?? '';
     if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
       rawThumb = 'https://academy.kainuwa.africa/$rawThumb';
     }
 
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
-      // Card automatically uses Theme.of(context).cardColor from our app_theme.dart!
+      // Card uses theme automatically, no hardcoded background
       child: InkWell(
         onTap: () {
           Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: int.parse(course['id'].toString()), courseTitle: course['title'])));
@@ -215,21 +430,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      course['title'], 
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), 
-                      maxLines: 2, 
-                      overflow: TextOverflow.ellipsis
-                    ),
+                    Text(course['title'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
                       value: double.parse(course['progress_percentage'].toString()) / 100,
+                      // Dynamic background for the progress bar
                       backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey[200],
                       color: AppTheme.primaryColor,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${course['progress_percentage']}% Complete', 
+                      // Dynamic grey text
                       style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey[600], fontSize: 11)
                     ),
                   ],
@@ -238,60 +450,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRecommendedCourses(bool isDark, Color textColor) {
-    if (_activeCourses.isEmpty) {
-      return const Text('No courses available right now.', style: TextStyle(color: Colors.grey));
-    }
-
-    return SizedBox(
-      height: 220,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _activeCourses.length > 5 ? 5 : _activeCourses.length,
-        itemBuilder: (context, index) {
-          final course = _activeCourses[index];
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 16),
-            child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: course)));
-                },
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    course.thumbnailUrl.isNotEmpty
-                        ? Image.network(course.thumbnailUrl, height: 100, width: double.infinity, fit: BoxFit.cover)
-                        : Container(height: 100, width: double.infinity, color: AppTheme.primaryColor, child: const Icon(Icons.image, color: Colors.white)),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            course.title, 
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor), 
-                            maxLines: 2, 
-                            overflow: TextOverflow.ellipsis
-                          ),
-                          const SizedBox(height: 8),
-                          Text('₦${course.price.toStringAsFixed(0)}', style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
       ),
     );
   }
