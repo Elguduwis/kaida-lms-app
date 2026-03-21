@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:dio/dio.dart';
@@ -32,7 +33,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   ChewieController? _chewieController;
   Timer? _progressTimer;
 
-  // Advanced Download Management Engine
   Map<String, String> _downloadedLessons = {};
   Map<String, double> _downloadProgress = {};
   final Map<String, CancelToken> _cancelTokens = {};
@@ -105,13 +105,11 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     });
   }
 
-  // --- ADVANCED DOWNLOAD ENGINE ---
   Future<void> _downloadLesson(dynamic lesson) async {
     String id = lesson['id'].toString();
     String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
     String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
     
-    // Prevent duplicates or invalid types
     if (type != 'video' || url.isEmpty || _isYoutubeOrVimeo(url)) return;
     if (_downloadedLessons.containsKey(id) || _downloadProgress.containsKey(id)) return;
 
@@ -136,7 +134,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
         },
       );
 
-      // Download Success
       final prefs = await SharedPreferences.getInstance();
       _downloadedLessons[id] = savePath;
       await prefs.setString('offline_downloads', json.encode(_downloadedLessons));
@@ -149,10 +146,8 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lesson['title']} downloaded!'), backgroundColor: Colors.green));
       }
     } catch (e) {
-      if (CancelToken.isCancel(e)) {
-        debugPrint("Download cancelled for $id");
-      } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed.'), backgroundColor: Colors.red));
+      if (!CancelToken.isCancel(e) && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed.'), backgroundColor: Colors.red));
       }
       if (mounted) {
         setState(() {
@@ -165,7 +160,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   void _cancelDownload(String id) {
     if (_cancelTokens.containsKey(id)) {
-      _cancelTokens[id]?.cancel("User requested cancellation.");
+      _cancelTokens[id]?.cancel();
       _cancelTokens.remove(id);
       setState(() => _downloadProgress.remove(id));
     }
@@ -186,7 +181,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entire course added to download queue!'), backgroundColor: AppTheme.primaryColor));
   }
 
-  // --- VIDEO PLAYER ENGINE ---
   void _playLesson(dynamic lesson) async {
     if (_currentLesson != null && _videoController != null) {
       _service.saveVideoProgress(int.parse(_currentLesson!['id'].toString()), _videoController!.value.position.inSeconds.toDouble());
@@ -231,7 +225,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           videoPlayerController: _videoController!,
           autoPlay: true,
           looping: false,
-          allowBackgroundPlayback: _playInBackground, // The Magic Background Flag
+          allowBackgroundPlayback: _playInBackground,
           materialProgressColors: ChewieProgressColors(
             playedColor: AppTheme.primaryColor,
             handleColor: AppTheme.primaryColor,
@@ -242,8 +236,10 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
         _startProgressTimer();
 
+        // THE FIX: Smart listener for auto-play
         _videoController!.addListener(() {
-          if (_videoController!.value.isInitialized && !_videoController!.value.isPlaying &&
+          if (_videoController!.value.isInitialized && 
+              !_videoController!.value.isPlaying &&
               _videoController!.value.position >= _videoController!.value.duration && 
               _videoController!.value.position > Duration.zero) {
             _playNextLesson();
@@ -255,11 +251,20 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     }
   }
 
+  // THE FIX: Graceful full-screen exiting
   void _playNextLesson() {
     if (_currentLesson == null) return;
     final currentIndex = _allLessons.indexWhere((l) => l['id'].toString() == _currentLesson!['id'].toString());
     if (currentIndex >= 0 && currentIndex < _allLessons.length - 1) {
-      _playLesson(_allLessons[currentIndex + 1]);
+      if (_chewieController != null && _chewieController!.isFullScreen) {
+        _chewieController!.exitFullScreen();
+        // Wait for the UI to settle before swapping the video
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _playLesson(_allLessons[currentIndex + 1]);
+        });
+      } else {
+        _playLesson(_allLessons[currentIndex + 1]);
+      }
     }
   }
 
@@ -267,25 +272,30 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     if (_currentLesson == null) return;
     final currentIndex = _allLessons.indexWhere((l) => l['id'].toString() == _currentLesson!['id'].toString());
     if (currentIndex > 0) {
-      _playLesson(_allLessons[currentIndex - 1]);
+      if (_chewieController != null && _chewieController!.isFullScreen) {
+        _chewieController!.exitFullScreen();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _playLesson(_allLessons[currentIndex - 1]);
+        });
+      } else {
+        _playLesson(_allLessons[currentIndex - 1]);
+      }
     }
   }
 
   @override
   void dispose() {
     _progressTimer?.cancel();
-    // Cancel all active downloads if user leaves screen completely to prevent memory leaks
     _cancelTokens.forEach((key, token) => token.cancel());
-    
     if (_currentLesson != null && _videoController != null) {
       _service.saveVideoProgress(int.parse(_currentLesson!['id'].toString()), _videoController!.value.position.inSeconds.toDouble());
     }
     _chewieController?.dispose();
     _videoController?.dispose();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
 
-  // --- UI WIDGETS ---
   Widget _buildDownloadStateWidget(dynamic lesson) {
     String id = lesson['id'].toString();
     String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
@@ -328,7 +338,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
           : Column(
               children: [
-                // 1. FIXED TOP VIDEO PLAYER
                 Container(
                   padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
                   width: double.infinity, 
@@ -349,14 +358,11 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                     ],
                   ),
                 ),
-
-                // 2. SCROLLABLE CURRICULUM AREA
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Title & Controls
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
@@ -368,8 +374,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                             children: [
                               Text(_currentLesson?['title'] ?? widget.courseTitle, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3)),
                               const SizedBox(height: 16),
-                              
-                              // Background Audio Toggle
                               Container(
                                 decoration: BoxDecoration(color: AppTheme.backgroundColor, borderRadius: BorderRadius.circular(12)),
                                 child: SwitchListTile(
@@ -386,8 +390,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-
-                              // Download All Course Button
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(
@@ -405,15 +407,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 16),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 20),
                           child: Text('Curriculum', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(height: 8),
-
-                        // Sections List
                         ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
