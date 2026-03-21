@@ -13,4 +13,5 @@ class ApiConfig {
   static const String getWishlist = '$baseUrl/get_wishlist.php';
   static const String uploadAvatar = '$baseUrl/upload_avatar.php';
   static const String getDownloadLink = '$baseUrl/get_download_link.php';
+  static const String changePassword = '$baseUrl/change_password.php';
 }

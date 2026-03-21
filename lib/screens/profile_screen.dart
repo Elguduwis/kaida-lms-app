@@ -40,7 +40,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _userId = userId);
 
     try {
-      // Fetch Profile Data
       final profileRes = await http.post(Uri.parse(ApiConfig.userProfile), body: {'user_id': userId.toString()});
       if (profileRes.statusCode == 200) {
         final pData = json.decode(profileRes.body);
@@ -54,7 +53,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // Fetch Wallet Balance
       final dashRes = await http.post(Uri.parse(ApiConfig.dashboardData), body: {'user_id': userId.toString()});
       if (dashRes.statusCode == 200) {
         final dData = json.decode(dashRes.body);
@@ -86,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           var jsonResponse = json.decode(responseData);
           if (jsonResponse['status'] == 'success') {
             setState(() => _avatarUrl = jsonResponse['avatar_url']);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated successfully!'), backgroundColor: Colors.green));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated on Kainuwa Academy!'), backgroundColor: Colors.green));
           } else {
             throw Exception(jsonResponse['message']);
           }
@@ -97,6 +95,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() => _isUploadingAvatar = false);
       }
     }
+  }
+
+  void _showPasswordDialog() {
+    final currentPasswordCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+    bool isChanging = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: currentPasswordCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Current Password', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: newPasswordCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isChanging ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  onPressed: isChanging ? null : () async {
+                    if (currentPasswordCtrl.text.isEmpty || newPasswordCtrl.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                      return;
+                    }
+
+                    setDialogState(() => isChanging = true);
+
+                    try {
+                      final response = await http.post(
+                        Uri.parse(ApiConfig.changePassword),
+                        body: {
+                          'user_id': _userId.toString(),
+                          'current_password': currentPasswordCtrl.text,
+                          'new_password': newPasswordCtrl.text,
+                        },
+                      );
+
+                      final data = json.decode(response.body);
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(data['message']),
+                          backgroundColor: data['status'] == 'success' ? Colors.green : Colors.red,
+                        ),
+                      );
+                    } catch (e) {
+                      setDialogState(() => isChanging = false);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection error')));
+                    }
+                  },
+                  child: isChanging ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Save', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    );
   }
 
   void _logout() async {
@@ -187,7 +263,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                      onPressed: () {},
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet top-up is coming soon!')));
+                      },
                       child: const Text('Top Up', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     )
                   ],
@@ -215,6 +293,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildMenuTile(Icons.share, 'Affiliate Dashboard', () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: 'Affiliate Panel', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/dashboard')));
                   }),
+
+                  _buildMenuTile(Icons.lock, 'Change Password', _showPasswordDialog),
 
                   _buildMenuTile(Icons.logout, 'Log Out', _logout, isDestructive: true),
                   const SizedBox(height: 30),
@@ -245,7 +325,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// Reusable Web View for Instructor/Affiliate Panels
 class WebDashboardScreen extends StatefulWidget {
   final String title;
   final String url;
