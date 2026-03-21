@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'config/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
+import 'services/fcm_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await Firebase.initializeApp();
+  await FcmService().initNotifications();
+
   runApp(const KaidaApp());
 }
 
@@ -44,16 +51,13 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   _checkLoginStatus() async {
-    // Show splash screen for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
     
-    // Check phone memory for the auth token
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
     
     if (!mounted) return;
     
-    // If token exists, skip login and go straight to Dashboard!
     if (token != null && token.isNotEmpty) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainLayout()));
     } else {
