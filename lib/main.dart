@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';
 import 'config/app_theme.dart';
+import 'config/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
 import 'services/fcm_service.dart';
 
-// 1. Create a Global Navigator Key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  
-  // 2. Pass the key to the FCM Service so it can handle routing
   await FcmService().initNotifications(navigatorKey);
 
-  runApp(const KaidaApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => ThemeProvider(),
+      child: const KaidaApp(),
+    ),
+  );
 }
 
 class KaidaApp extends StatelessWidget {
@@ -24,18 +28,15 @@ class KaidaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Kainuwa Academy',
       debugShowCheckedModeBanner: false,
-      navigatorKey: navigatorKey, // 3. Attach the key to your app
-      theme: ThemeData(
-        primaryColor: AppTheme.primaryColor,
-        scaffoldBackgroundColor: AppTheme.backgroundColor,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppTheme.primaryColor,
-          elevation: 0,
-        ),
-      ),
+      navigatorKey: navigatorKey,
+      themeMode: themeProvider.themeMode,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       home: const SplashScreen(),
     );
   }
@@ -43,7 +44,6 @@ class KaidaApp extends StatelessWidget {
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
-
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
