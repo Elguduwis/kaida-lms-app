@@ -26,7 +26,20 @@ class AppTheme {
       selectedItemColor: primaryColor,
       unselectedItemColor: Colors.grey,
     ),
-    cardColor: Colors.white,
+    cardTheme: const CardTheme(
+      color: Colors.white,
+      elevation: 1,
+      surfaceTintColor: Colors.transparent,
+    ),
+    listTileTheme: const ListTileThemeData(
+      iconColor: primaryColor,
+      textColor: Colors.black87,
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(color: Colors.black87),
+      bodyMedium: TextStyle(color: Colors.black87),
+      titleLarge: TextStyle(color: Colors.black),
+    ),
   );
 
   static final ThemeData darkTheme = ThemeData(
@@ -44,6 +57,19 @@ class AppTheme {
       selectedItemColor: primaryColor,
       unselectedItemColor: Colors.grey.shade500,
     ),
-    cardColor: darkSurfaceColor,
+    cardTheme: const CardTheme(
+      color: darkSurfaceColor,
+      elevation: 1,
+      surfaceTintColor: Colors.transparent, // Prevents Flutter 3's weird color tinting
+    ),
+    listTileTheme: const ListTileThemeData(
+      iconColor: primaryColor,
+      textColor: Colors.white,
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(color: Colors.white),
+      bodyMedium: TextStyle(color: Colors.white70),
+      titleLarge: TextStyle(color: Colors.white),
+    ),
   );
 }
