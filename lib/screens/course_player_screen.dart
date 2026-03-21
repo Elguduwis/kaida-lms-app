@@ -39,7 +39,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   List<dynamic> get _allLessons {
     List<dynamic> list = [];
     for (var s in _sections) {
-      list.addAll(s['lessons'] ?? []);
+      list.addAll(s['lessons'] ?? s['items'] ?? []);
     }
     return list;
   }
@@ -47,223 +47,467 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _checkDownloadedFiles();
-    _fetchCurriculum();
+    _loadPreferences();
+    _loadCourseData();
   }
 
-  @override
-  void dispose() {
-    _progressTimer?.cancel();
-    _videoController?.dispose();
-    _chewieController?.dispose();
-    for (var token in _cancelTokens.values) {
-      token.cancel();
-    }
-    super.dispose();
-  }
-
-  Future<void> _checkDownloadedFiles() async {
+  void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys();
-    Map<String, String> downloads = {};
-    for (var key in keys) {
-      if (key.startsWith('offline_lesson_')) {
-        final lessonId = key.replaceFirst('offline_lesson_', '');
-        downloads[lessonId] = prefs.getString(key)!;
+    
+    final String? downloadsJson = prefs.getString('offline_downloads');
+    if (downloadsJson != null) {
+      if (mounted) {
+        setState(() {
+          Map<String, dynamic> decoded = json.decode(downloadsJson);
+          _downloadedLessons = decoded.map((key, value) => MapEntry(key, value.toString()));
+        });
       }
     }
-    if (mounted) setState(() => _downloadedLessons = downloads);
   }
 
-  Future<void> _fetchCurriculum() async {
+  void _loadCourseData() async {
     final data = await _service.getCourseDetails(widget.courseId);
-    if (mounted) {
-      setState(() {
-        _sections = data ?? [];
-        _isLoading = false;
-        if (_allLessons.isNotEmpty) {
-          _playLesson(_allLessons.first);
-        }
-      });
+    if (data != null) {
+      List<dynamic> parsedSections = [];
+      if (data is List) parsedSections = data;
+      else if (data is Map && data.containsKey('sections')) parsedSections = data['sections'];
+      else if (data is Map && data.containsKey('curriculum')) parsedSections = data['curriculum'];
+      else if (data is Map && data.containsKey('data')) parsedSections = data['data'];
+
+      if (mounted) {
+        setState(() {
+          _sections = parsedSections;
+          _isLoading = false;
+        });
+        if (_allLessons.isNotEmpty) _playLesson(_allLessons.first);
+      }
+    } else {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   bool _isYoutubeOrVimeo(String url) {
-    return url.contains('youtube.com') || url.contains('youtu.be') || url.contains('vimeo.com');
+    String lowerUrl = url.toLowerCase();
+    return lowerUrl.contains('youtube.com') || lowerUrl.contains('youtu.be') || lowerUrl.contains('vimeo.com');
   }
 
-  Future<void> _playLesson(Map<String, dynamic> lesson) async {
+  void _startProgressTimer() {
     _progressTimer?.cancel();
-    _videoController?.pause();
-    _videoController?.dispose();
-    _chewieController?.dispose();
-    
-    setState(() {
-      _currentLesson = lesson;
-      _videoController = null;
-      _chewieController = null;
-    });
-
-    String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
-    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
-    String lessonIdStr = lesson['id'].toString();
-
-    if (type == 'video' && url.isNotEmpty && !_isYoutubeOrVimeo(url)) {
-      // Offline Playback Logic
-      if (_downloadedLessons.containsKey(lessonIdStr)) {
-        final file = File(_downloadedLessons[lessonIdStr]!);
-        if (await file.exists()) {
-          _videoController = VideoPlayerController.file(file);
-        } else {
-          _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
-        }
-      } else {
-        _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
-      }
-
-      await _videoController!.initialize();
-      
-      // Resume from last watched position
-      int startSeconds = int.tryParse(lesson['seconds_watched']?.toString() ?? '0') ?? 0;
-      if (startSeconds > 0 && startSeconds < _videoController!.value.duration.inSeconds) {
-        await _videoController!.seekTo(Duration(seconds: startSeconds));
-      }
-
-      setState(() {
-        _chewieController = ChewieController(
-          videoPlayerController: _videoController!,
-          autoPlay: true,
-          looping: false,
-          allowPlaybackSpeedChanging: true,
-          errorBuilder: (context, errorMessage) {
-            return Center(child: Text(errorMessage, style: const TextStyle(color: Colors.white)));
-          },
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (_currentLesson != null && _videoController != null && _videoController!.value.isPlaying) {
+        _service.saveVideoProgress(
+          int.parse(_currentLesson!['id'].toString()), 
+          _videoController!.value.position.inSeconds.toDouble()
         );
-      });
-
-      // Background Progress Sync
-      _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-        if (_videoController != null && _videoController!.value.isPlaying) {
-          _service.saveVideoProgress(
-            int.parse(lessonIdStr), 
-            _videoController!.value.position.inSeconds.toDouble()
-          );
-        }
-      });
-      
-      // Auto-Next Logic
-      _videoController!.addListener(() {
-        if (_videoController!.value.position == _videoController!.value.duration) {
-          _playNextLesson();
-        }
-      });
-    }
-  }
-
-  void _playNextLesson() {
-    if (_currentLesson == null) return;
-    final lessons = _allLessons;
-    final currentIndex = lessons.indexWhere((l) => l['id'] == _currentLesson!['id']);
-    if (currentIndex != -1 && currentIndex < lessons.length - 1) {
-      _playLesson(lessons[currentIndex + 1]);
-    }
-  }
-
-  Future<void> _startDownload(Map<String, dynamic> lesson) async {
-    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
-    String lessonIdStr = lesson['id'].toString();
-    
-    if (url.isEmpty || _isYoutubeOrVimeo(url)) return;
-
-    final dir = await getApplicationDocumentsDirectory();
-    final savePath = '${dir.path}/lesson_$lessonIdStr.mp4';
-    final cancelToken = CancelToken();
-
-    setState(() {
-      _downloadProgress[lessonIdStr] = 0.01;
-      _cancelTokens[lessonIdStr] = cancelToken;
+      }
     });
+  }
+
+  Future<void> _downloadLesson(dynamic lesson) async {
+    String id = lesson['id'].toString();
+    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
+    String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
+    
+    if (type != 'video' || url.isEmpty || _isYoutubeOrVimeo(url)) return;
+    if (_downloadedLessons.containsKey(id) || _downloadProgress.containsKey(id)) return;
+
+    setState(() => _downloadProgress[id] = 0.01);
+    CancelToken cancelToken = CancelToken();
+    _cancelTokens[id] = cancelToken;
 
     try {
-      await Dio().download(
-        url,
-        savePath,
+      if (!url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url;
+
+      final dir = await getApplicationDocumentsDirectory();
+      final savePath = '${dir.path}/lesson_$id.mp4';
+
+      final dio = Dio();
+      await dio.download(
+        url, savePath,
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
-          if (total != -1) {
-            setState(() {
-              _downloadProgress[lessonIdStr] = received / total;
-            });
+          if (total != -1 && mounted) {
+            setState(() => _downloadProgress[id] = received / total);
           }
         },
       );
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('offline_lesson_$lessonIdStr', savePath);
+      _downloadedLessons[id] = savePath;
+      await prefs.setString('offline_downloads', json.encode(_downloadedLessons));
 
-      setState(() {
-        _downloadProgress.remove(lessonIdStr);
-        _cancelTokens.remove(lessonIdStr);
-        _downloadedLessons[lessonIdStr] = savePath;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download Complete'), backgroundColor: Colors.green));
+      if (mounted) {
+        setState(() {
+          _downloadProgress.remove(id);
+          _cancelTokens.remove(id);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lesson['title']} downloaded!'), backgroundColor: Colors.green));
+      }
     } catch (e) {
-      setState(() {
-        _downloadProgress.remove(lessonIdStr);
-        _cancelTokens.remove(lessonIdStr);
-      });
+      if (e is DioException && CancelToken.isCancel(e)) {
+        debugPrint("Download cancelled by user.");
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed.'), backgroundColor: Colors.red));
+      }
+      
+      if (mounted) {
+        setState(() {
+          _downloadProgress.remove(id);
+          _cancelTokens.remove(id);
+        });
+      }
+    }
+  }
+
+  void _cancelDownload(String id) {
+    if (_cancelTokens.containsKey(id)) {
+      _cancelTokens[id]?.cancel();
+      _cancelTokens.remove(id);
+      setState(() => _downloadProgress.remove(id));
+    }
+  }
+
+  void _downloadSection(dynamic section) {
+    List items = section['lessons'] ?? section['items'] ?? [];
+    for (var lesson in items) {
+      _downloadLesson(lesson);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Section added to download queue!'), backgroundColor: AppTheme.primaryColor));
+  }
+
+  void _downloadEntireCourse() {
+    for (var sec in _sections) {
+      _downloadSection(sec);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entire course added to download queue!'), backgroundColor: AppTheme.primaryColor));
+  }
+
+  void _playLesson(dynamic lesson) async {
+    if (_currentLesson != null && _videoController != null) {
+      _service.saveVideoProgress(int.parse(_currentLesson!['id'].toString()), _videoController!.value.position.inSeconds.toDouble());
+    }
+
+    _progressTimer?.cancel();
+    String id = lesson['id'].toString();
+    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
+    String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
+
+    setState(() {
+      _currentLesson = Map<String, dynamic>.from(lesson);
+      if (_chewieController != null) {
+        _chewieController!.dispose();
+        _chewieController = null;
+      }
+      if (_videoController != null) {
+        _videoController!.dispose();
+        _videoController = null;
+      }
+    });
+
+    if (type == 'video' && url.isNotEmpty) {
+      if (!_isYoutubeOrVimeo(url)) {
+        if (_downloadedLessons.containsKey(id)) {
+          File localFile = File(_downloadedLessons[id]!);
+          if (await localFile.exists()) {
+             _videoController = VideoPlayerController.file(localFile);
+          } else {
+             _downloadedLessons.remove(id);
+             if (!url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url;
+             _videoController = VideoPlayerController.network(url);
+          }
+        } else {
+          if (!url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url;
+          _videoController = VideoPlayerController.network(url);
+        }
+
+        await _videoController!.initialize();
+
+        _chewieController = ChewieController(
+          videoPlayerController: _videoController!,
+          autoPlay: true,
+          looping: false,
+          materialProgressColors: ChewieProgressColors(
+            playedColor: AppTheme.primaryColor,
+            handleColor: AppTheme.primaryColor,
+            backgroundColor: Colors.grey.shade800,
+            bufferedColor: Colors.grey.shade400,
+          ),
+        );
+
+        _startProgressTimer();
+
+        _videoController!.addListener(() {
+          if (_videoController!.value.isInitialized && 
+              !_videoController!.value.isPlaying &&
+              _videoController!.value.position >= _videoController!.value.duration && 
+              _videoController!.value.position > Duration.zero) {
+            _playNextLesson();
+          }
+        });
+
+        if (mounted) setState(() {});
+      }
+    }
+  }
+
+  void _playNextLesson() {
+    if (_currentLesson == null) return;
+    final currentIndex = _allLessons.indexWhere((l) => l['id'].toString() == _currentLesson!['id'].toString());
+    if (currentIndex >= 0 && currentIndex < _allLessons.length - 1) {
+      if (_chewieController != null && _chewieController!.isFullScreen) {
+        _chewieController!.exitFullScreen();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _playLesson(_allLessons[currentIndex + 1]);
+        });
+      } else {
+        _playLesson(_allLessons[currentIndex + 1]);
+      }
+    }
+  }
+
+  void _playPrevLesson() {
+    if (_currentLesson == null) return;
+    final currentIndex = _allLessons.indexWhere((l) => l['id'].toString() == _currentLesson!['id'].toString());
+    if (currentIndex > 0) {
+      if (_chewieController != null && _chewieController!.isFullScreen) {
+        _chewieController!.exitFullScreen();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _playLesson(_allLessons[currentIndex - 1]);
+        });
+      } else {
+        _playLesson(_allLessons[currentIndex - 1]);
+      }
     }
   }
 
   @override
+  void dispose() {
+    _progressTimer?.cancel();
+    _cancelTokens.forEach((key, token) => token.cancel());
+    if (_currentLesson != null && _videoController != null) {
+      _service.saveVideoProgress(int.parse(_currentLesson!['id'].toString()), _videoController!.value.position.inSeconds.toDouble());
+    }
+    _chewieController?.dispose();
+    _videoController?.dispose();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
+  Widget _buildDownloadStateWidget(dynamic lesson, bool isDark) {
+    String id = lesson['id'].toString();
+    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
+    String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
+
+    if (type != 'video' || url.isEmpty || _isYoutubeOrVimeo(url)) return const SizedBox();
+    
+    if (_downloadedLessons.containsKey(id)) {
+      return const Icon(Icons.check_circle, color: Colors.green, size: 24);
+    }
+    
+    if (_downloadProgress.containsKey(id)) {
+      return GestureDetector(
+        onTap: () => _cancelDownload(id),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 28, height: 28,
+              child: CircularProgressIndicator(value: _downloadProgress[id], strokeWidth: 3, color: AppTheme.primaryColor),
+            ),
+            const Icon(Icons.close, size: 14, color: AppTheme.primaryColor),
+          ],
+        ),
+      );
+    }
+    
+    return IconButton(
+      icon: Icon(Icons.cloud_download_outlined, color: isDark ? Colors.grey.shade400 : Colors.grey),
+      onPressed: () => _downloadLesson(lesson),
+      tooltip: 'Download Lesson',
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Dynamic Theme Detectors
+    // Dynamic theme checks to preserve layout while supporting dark mode
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-    final cardColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
+    final surfaceColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.courseTitle, style: const TextStyle(fontSize: 16)),
-        centerTitle: true,
-      ),
+      // Using AppTheme.backgroundColor directly looks bad in Dark Mode, letting Scaffold handle it based on Theme
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
           : Column(
               children: [
-                // 1. Player Area (Always Dark)
                 Container(
-                  width: double.infinity,
-                  height: 230,
-                  color: Colors.black,
-                  child: _buildPlayerArea(),
+                  padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+                  width: double.infinity, 
+                  height: 250 + MediaQuery.of(context).padding.top, 
+                  color: Colors.black, // Player area always black
+                  child: Stack(
+                    children: [
+                      _currentLesson == null
+                          ? const Center(child: Text('Select a lesson', style: TextStyle(color: Colors.white)))
+                          : _buildPlayerArea(),
+                      Positioned(
+                        top: 10, left: 10,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, shadows: [Shadow(blurRadius: 10, color: Colors.black)]),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      )
+                    ],
+                  ),
                 ),
-                
-                // 2. Current Lesson Info
-                if (_currentLesson != null)
-                  Container(
-                    width: double.infinity,
-                    color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
-                    padding: const EdgeInsets.all(16.0),
+                Expanded(
+                  child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_currentLesson!['title'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
-                        const SizedBox(height: 4),
-                        Text('Now Playing', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600, fontSize: 12)),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: surfaceColor, // Dynamic card color
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 5))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_currentLesson?['title'] ?? widget.courseTitle, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3, color: textColor)),
+                              const SizedBox(height: 16),
+                              
+                              // NEW: Prev and Next Buttons Row
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppTheme.primaryColor,
+                                        side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                                      ),
+                                      icon: const Icon(Icons.skip_previous, size: 20),
+                                      label: const Text('Prev', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      onPressed: _playPrevLesson,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppTheme.primaryColor,
+                                        side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                                      ),
+                                      onPressed: _playNextLesson,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: const [
+                                          Text('Next', style: TextStyle(fontWeight: FontWeight.bold)),
+                                          SizedBox(width: 4),
+                                          Icon(Icons.skip_next, size: 20),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Download Entire Course Button
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryColor,
+                                    side: const BorderSide(color: AppTheme.primaryColor, width: 2),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                                  ),
+                                  icon: const Icon(Icons.download_for_offline),
+                                  label: const Text('Download Entire Course', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                  onPressed: _downloadEntireCourse,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Text('Curriculum', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+                        ),
+                        const SizedBox(height: 8),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _sections.length,
+                          itemBuilder: (context, index) {
+                            final section = _sections[index];
+                            List items = section['lessons'] ?? section['items'] ?? [];
+                            
+                            return Theme(
+                              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                              child: ExpansionTile(
+                                initiallyExpanded: index == 0,
+                                title: Row(
+                                  children: [
+                                    Expanded(child: Text(section['title'] ?? 'Section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor))),
+                                    IconButton(
+                                      icon: const Icon(Icons.drive_file_move_outline, color: AppTheme.primaryColor),
+                                      tooltip: 'Download Section',
+                                      onPressed: () => _downloadSection(section),
+                                    ),
+                                  ],
+                                ),
+                                children: items.map((lesson) {
+                                  final isPlaying = _currentLesson?['id'].toString() == lesson['id'].toString();
+                                  String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
+                                  String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
+                                  bool hasAccess = url.isNotEmpty;
+
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      // Dynamic container color for Dark Mode
+                                      color: isPlaying ? AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.08) : surfaceColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: isPlaying ? AppTheme.primaryColor.withOpacity(0.5) : (isDark ? Colors.grey.shade700 : Colors.grey.shade200)),
+                                    ),
+                                    child: ListTile(
+                                      leading: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          // Dynamic icon background
+                                          color: isPlaying ? AppTheme.primaryColor : (isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          isPlaying ? Icons.pause : (!hasAccess ? Icons.lock : (type == 'video' ? Icons.play_arrow : Icons.article)),
+                                          // Dynamic icon color
+                                          color: isPlaying ? Colors.white : (isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                                          size: 16,
+                                        ),
+                                      ),
+                                      title: Text(
+                                        lesson['title'] ?? 'Lesson',
+                                        style: TextStyle(color: isPlaying ? AppTheme.primaryColor : textColor, fontWeight: isPlaying ? FontWeight.bold : FontWeight.w600, fontSize: 13),
+                                      ),
+                                      trailing: hasAccess ? _buildDownloadStateWidget(lesson, isDark) : null,
+                                      onTap: hasAccess ? () => _playLesson(lesson) : () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enroll to view this lesson.'), backgroundColor: Colors.orange)),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
-                  ),
-                
-                Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-                
-                // 3. Curriculum List
-                Expanded(
-                  child: Container(
-                    color: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
-                    child: _buildCurriculum(isDark, textColor, subTextColor, cardColor),
                   ),
                 ),
               ],
@@ -272,12 +516,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   }
 
   Widget _buildPlayerArea() {
-    String type = _currentLesson?['content_type']?.toString() ?? _currentLesson?['lesson_type']?.toString() ?? 'video';
-    String url = _currentLesson?['content']?.toString() ?? _currentLesson?['video_url']?.toString() ?? '';
+    String type = _currentLesson!['content_type']?.toString() ?? _currentLesson!['lesson_type']?.toString() ?? 'video';
+    String url = _currentLesson!['content']?.toString() ?? _currentLesson!['video_url']?.toString() ?? '';
     
     if (type == 'video') {
       if (_isYoutubeOrVimeo(url)) {
-        return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('YouTube/Vimeo playback requires advanced plugins.', style: TextStyle(color: Colors.white70), textAlign: TextAlign.center)));
+        return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('YouTube/Vimeo playback requires advanced plugins (Phase 2).', style: TextStyle(color: Colors.white70), textAlign: TextAlign.center)));
       }
       if (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized) {
         return Chewie(controller: _chewieController!);
@@ -288,94 +532,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
       return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
     } else {
       return const Center(child: Icon(Icons.article, size: 60, color: Colors.white54));
-    }
-  }
-
-  Widget _buildCurriculum(bool isDark, Color textColor, Color subTextColor, Color cardColor) {
-    if (_sections.isEmpty) return Center(child: Text('No curriculum found.', style: TextStyle(color: subTextColor)));
-
-    return ListView.builder(
-      itemCount: _sections.length,
-      itemBuilder: (context, index) {
-        final section = _sections[index];
-        final lessons = section['lessons'] as List<dynamic>? ?? [];
-
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          color: cardColor,
-          clipBehavior: Clip.antiAlias,
-          child: ExpansionTile(
-            initiallyExpanded: index == 0,
-            backgroundColor: Colors.transparent,
-            collapsedBackgroundColor: Colors.transparent,
-            title: Text(section['title'] ?? 'Section', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-            collapsedIconColor: subTextColor,
-            iconColor: AppTheme.primaryColor,
-            children: lessons.map((lesson) {
-              final isPlaying = _currentLesson != null && _currentLesson!['id'] == lesson['id'];
-              final isCompleted = lesson['is_completed'] == 1;
-              final lessonIdStr = lesson['id'].toString();
-              final isDownloaded = _downloadedLessons.containsKey(lessonIdStr);
-              final progress = _downloadProgress[lessonIdStr];
-
-              return Container(
-                color: isPlaying ? AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.1) : Colors.transparent,
-                child: ListTile(
-                  leading: Icon(
-                    isCompleted ? Icons.check_circle : (isPlaying ? Icons.pause_circle_filled : Icons.play_circle_outline),
-                    color: isCompleted ? Colors.green : (isPlaying ? AppTheme.primaryColor : subTextColor),
-                  ),
-                  title: Text(
-                    lesson['title'],
-                    style: TextStyle(
-                      color: isPlaying ? AppTheme.primaryColor : textColor,
-                      fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
-                  trailing: _buildDownloadTrailing(lesson, isDownloaded, progress, subTextColor),
-                  onTap: () => _playLesson(lesson),
-                ),
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget? _buildDownloadTrailing(Map<String, dynamic> lesson, bool isDownloaded, double? progress, Color subTextColor) {
-    String type = lesson['content_type']?.toString() ?? lesson['lesson_type']?.toString() ?? 'video';
-    String url = lesson['content']?.toString() ?? lesson['video_url']?.toString() ?? '';
-    String lessonIdStr = lesson['id'].toString();
-
-    if (type != 'video' || url.isEmpty || _isYoutubeOrVimeo(url)) return null;
-
-    if (isDownloaded) {
-      return const Icon(Icons.offline_pin, color: Colors.green, size: 20);
-    } else if (progress != null) {
-      return SizedBox(
-        width: 24, height: 24,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CircularProgressIndicator(value: progress, strokeWidth: 2, color: AppTheme.primaryColor),
-            IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.close, size: 12, color: Colors.red),
-              onPressed: () {
-                _cancelTokens[lessonIdStr]?.cancel();
-                setState(() => _downloadProgress.remove(lessonIdStr));
-              },
-            )
-          ],
-        ),
-      );
-    } else {
-      return IconButton(
-        icon: Icon(Icons.download_for_offline, color: subTextColor, size: 24),
-        onPressed: () => _startDownload(lesson),
-      );
     }
   }
 }
