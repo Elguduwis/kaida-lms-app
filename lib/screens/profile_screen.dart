@@ -290,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: 'Instructor Panel', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/dashboard')));
                     }),
 
-                  _buildMenuTile(Icons.share, 'Affiliate Dashboard', () {
+                  if (_role == 'affiliate' || _role == 'admin') _buildMenuTile(Icons.share, 'Affiliate Dashboard', () {
                     Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: 'Affiliate Panel', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/dashboard')));
                   }),
 
