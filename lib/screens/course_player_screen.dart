@@ -24,7 +24,6 @@ class CoursePlayerScreen extends StatefulWidget {
 class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
   final CoursePlayerService _service = CoursePlayerService();
   bool _isLoading = true;
-  bool _playInBackground = false;
   
   List<dynamic> _sections = [];
   Map<String, dynamic>? _currentLesson;
@@ -54,7 +53,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
   void _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _playInBackground = prefs.getBool('bg_audio') ?? false);
     
     final String? downloadsJson = prefs.getString('offline_downloads');
     if (downloadsJson != null) {
@@ -146,9 +144,13 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${lesson['title']} downloaded!'), backgroundColor: Colors.green));
       }
     } catch (e) {
-      if (!CancelToken.isCancel(e) && mounted) {
+      // FIX: Safely check if the error is a DioException before checking cancellation
+      if (e is DioException && CancelToken.isCancel(e)) {
+        debugPrint("Download cancelled by user.");
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed.'), backgroundColor: Colors.red));
       }
+      
       if (mounted) {
         setState(() {
           _downloadProgress.remove(id);
@@ -225,7 +227,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
           videoPlayerController: _videoController!,
           autoPlay: true,
           looping: false,
-          allowBackgroundPlayback: _playInBackground,
+          // FIX: Removed invalid parameter, background audio deferred to Phase 3 Foreground Service
           materialProgressColors: ChewieProgressColors(
             playedColor: AppTheme.primaryColor,
             handleColor: AppTheme.primaryColor,
@@ -236,7 +238,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
 
         _startProgressTimer();
 
-        // THE FIX: Smart listener for auto-play
         _videoController!.addListener(() {
           if (_videoController!.value.isInitialized && 
               !_videoController!.value.isPlaying &&
@@ -251,14 +252,12 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     }
   }
 
-  // THE FIX: Graceful full-screen exiting
   void _playNextLesson() {
     if (_currentLesson == null) return;
     final currentIndex = _allLessons.indexWhere((l) => l['id'].toString() == _currentLesson!['id'].toString());
     if (currentIndex >= 0 && currentIndex < _allLessons.length - 1) {
       if (_chewieController != null && _chewieController!.isFullScreen) {
         _chewieController!.exitFullScreen();
-        // Wait for the UI to settle before swapping the video
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) _playLesson(_allLessons[currentIndex + 1]);
         });
@@ -374,22 +373,6 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
                             children: [
                               Text(_currentLesson?['title'] ?? widget.courseTitle, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.3)),
                               const SizedBox(height: 16),
-                              Container(
-                                decoration: BoxDecoration(color: AppTheme.backgroundColor, borderRadius: BorderRadius.circular(12)),
-                                child: SwitchListTile(
-                                  title: const Text('Background Audio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  subtitle: const Text('Keep playing when app is minimized', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                  value: _playInBackground,
-                                  activeColor: AppTheme.primaryColor,
-                                  onChanged: (val) async {
-                                    final prefs = await SharedPreferences.getInstance();
-                                    await prefs.setBool('bg_audio', val);
-                                    setState(() => _playInBackground = val);
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preference saved. Will apply to the next lesson played.')));
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 12),
                               SizedBox(
                                 width: double.infinity,
                                 child: OutlinedButton.icon(
