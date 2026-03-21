@@ -7,9 +7,13 @@ import 'screens/main_layout.dart';
 import 'services/fcm_service.dart';
 
 void main() async {
+  // Ensure Flutter engine is fully initialized before Firebase
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialize Firebase
   await Firebase.initializeApp();
+  
+  // Initialize Push Notifications and retrieve token
   await FcmService().initNotifications();
 
   runApp(const KaidaApp());

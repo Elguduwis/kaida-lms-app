@@ -7,14 +7,17 @@ class FcmService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   Future<void> initNotifications() async {
+    // Request permission (Required for iOS, good practice for Android 13+)
     NotificationSettings settings = await _firebaseMessaging.requestPermission();
     
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // Get the unique device token
       String? token = await _firebaseMessaging.getToken();
       if (token != null) {
         await _saveTokenToServer(token);
       }
 
+      // Listen for token refreshes if it changes later
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
         _saveTokenToServer(newToken);
       });
@@ -35,7 +38,7 @@ class FcmService {
           },
         );
       } catch (e) {
-        // Silent fail
+        // Silent fail for background sync
       }
     }
   }
