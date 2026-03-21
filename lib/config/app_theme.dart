@@ -26,7 +26,7 @@ class AppTheme {
       selectedItemColor: primaryColor,
       unselectedItemColor: Colors.grey,
     ),
-    cardTheme: const CardTheme(
+    cardTheme: const CardThemeData(
       color: Colors.white,
       elevation: 1,
       surfaceTintColor: Colors.transparent,
@@ -57,7 +57,7 @@ class AppTheme {
       selectedItemColor: primaryColor,
       unselectedItemColor: Colors.grey.shade500,
     ),
-    cardTheme: const CardTheme(
+    cardTheme: const CardThemeData(
       color: darkSurfaceColor,
       elevation: 1,
       surfaceTintColor: Colors.transparent, // Prevents Flutter 3's weird color tinting

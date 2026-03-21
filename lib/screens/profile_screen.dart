@@ -355,7 +355,7 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
   void initState() {
     super.initState();
     _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)\n      ..setBackgroundColor(AppTheme.backgroundColor)
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)       ..setBackgroundColor(AppTheme.backgroundColor)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
