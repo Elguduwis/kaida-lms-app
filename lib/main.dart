@@ -6,15 +6,15 @@ import 'screens/login_screen.dart';
 import 'screens/main_layout.dart';
 import 'services/fcm_service.dart';
 
+// 1. Create a Global Navigator Key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
-  // Ensure Flutter engine is fully initialized before Firebase
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Firebase
   await Firebase.initializeApp();
   
-  // Initialize Push Notifications and retrieve token
-  await FcmService().initNotifications();
+  // 2. Pass the key to the FCM Service so it can handle routing
+  await FcmService().initNotifications(navigatorKey);
 
   runApp(const KaidaApp());
 }
@@ -27,6 +27,7 @@ class KaidaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Kainuwa Academy',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey, // 3. Attach the key to your app
       theme: ThemeData(
         primaryColor: AppTheme.primaryColor,
         scaffoldBackgroundColor: AppTheme.backgroundColor,
@@ -56,7 +57,6 @@ class _SplashScreenState extends State<SplashScreen> {
 
   _checkLoginStatus() async {
     await Future.delayed(const Duration(seconds: 2));
-    
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token');
     
@@ -79,10 +79,7 @@ class _SplashScreenState extends State<SplashScreen> {
           children: const [
             Icon(Icons.school, size: 80, color: Colors.white),
             SizedBox(height: 20),
-            Text(
-              'KAIDA LMS',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2),
-            ),
+            Text('KAIDA LMS', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
             SizedBox(height: 40),
             CircularProgressIndicator(color: Colors.white),
           ],
