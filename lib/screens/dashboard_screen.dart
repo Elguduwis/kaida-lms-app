@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'course_player_screen.dart';
@@ -19,6 +18,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic> _myCourses = [];
   List<dynamic> _filteredCourses = [];
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -49,7 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final response = await http.post(
         Uri.parse(ApiConfig.myCourses),
         body: {'user_id': userId.toString()},
-      ).timeout(const Duration(seconds: 15));
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -58,17 +58,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (mounted) {
             setState(() {
               _myCourses = data['data'];
-              _filterCourses(_searchQuery); // Re-apply search to fresh data
+              _filterCourses(_searchQuery); // re-apply search if exists
               _isLoading = false;
             });
           }
         }
       }
     } catch (e) {
-      debugPrint("MyCourses Sync Error: $e");
-      if (mounted && _myCourses.isEmpty) {
-         setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -79,8 +76,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _filteredCourses = _myCourses;
       } else {
         _filteredCourses = _myCourses.where((course) {
-          final title = course['title']?.toString().toLowerCase() ?? '';
-          final instructor = course['instructor_name']?.toString().toLowerCase() ?? '';
+          final title = course['title'].toString().toLowerCase();
+          final instructor = course['instructor_name'].toString().toLowerCase();
           final searchLower = query.toLowerCase();
           return title.contains(searchLower) || instructor.contains(searchLower);
         }).toList();
@@ -90,170 +87,160 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Dynamic Theme Detectors
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // 1. Sleek App Bar
-          const SliverAppBar(
-            backgroundColor: AppTheme.primaryColor,
-            elevation: 0,
-            pinned: true,
-            title: Text('My Learning', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-            centerTitle: true,
-          ),
-
-          // 2. Search Bar Section
-          SliverToBoxAdapter(
-            child: Container(
-              color: AppTheme.primaryColor,
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-                ),
-                child: TextField(
-                  onChanged: _filterCourses,
-                  decoration: InputDecoration(
-                    hintText: 'Search my courses...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400),
-                    prefixIcon: const Icon(Icons.search, color: AppTheme.primaryColor),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.grey),
-                            onPressed: () {
-                              FocusScope.of(context).unfocus();
-                              _filterCourses('');
-                            },
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // 3. States (Loading, Empty, or List)
-          if (_isLoading)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)))
-          else if (_myCourses.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(40.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.video_library_outlined, size: 80, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
-                      Text('No courses yet.', style: TextStyle(fontSize: 20, color: Colors.grey.shade800, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text('Enroll in a course to start your learning journey!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      appBar: AppBar(
+        title: const Text('My Learning'),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          _buildSearchBar(isDark, textColor, subTextColor),
+          Expanded(
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+              : RefreshIndicator(
+                  color: AppTheme.primaryColor,
+                  onRefresh: _fetchMyCourses,
+                  child: _filteredCourses.isEmpty
+                      ? _buildEmptyState(textColor)
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          itemCount: _filteredCourses.length,
+                          itemBuilder: (context, index) {
+                            return _buildCourseCard(_filteredCourses[index], isDark, textColor, subTextColor);
+                          },
                         ),
-                        onPressed: () {
-                          // Jump to Explore screen
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const CatalogScreen(actionType: 'courses', title: 'Explore Courses')));
-                        },
-                        child: const Text('Explore Courses', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      )
-                    ],
-                  ),
                 ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(bool isDark, Color textColor, Color subTextColor) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.grey.shade800 : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300)
+        ),
+        child: TextField(
+          controller: _searchController,
+          style: TextStyle(color: textColor),
+          decoration: InputDecoration(
+            hintText: 'Search my courses...',
+            hintStyle: TextStyle(color: subTextColor),
+            prefixIcon: Icon(Icons.search, color: subTextColor),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.clear, color: subTextColor),
+                    onPressed: () {
+                      _searchController.clear();
+                      _filterCourses('');
+                      FocusScope.of(context).unfocus();
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+          onChanged: _filterCourses,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(Color textColor) {
+    bool hasNoCoursesAtAll = _myCourses.isEmpty && _searchQuery.isEmpty;
+    
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            hasNoCoursesAtAll ? Icons.school_outlined : Icons.search_off, 
+            size: 64, 
+            color: Colors.grey.shade400
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasNoCoursesAtAll ? 'You haven\'t enrolled yet' : 'No courses found', 
+            style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasNoCoursesAtAll ? 'Start your learning journey today!' : 'Try a different search term', 
+            style: TextStyle(color: Colors.grey.shade500)
+          ),
+          const SizedBox(height: 24),
+          if (hasNoCoursesAtAll)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-            )
-          else if (_filteredCourses.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search_off, size: 60, color: Colors.grey.shade300),
-                    const SizedBox(height: 16),
-                    Text('No matches found.', style: TextStyle(fontSize: 16, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildCourseCard(_filteredCourses[index]),
-                  childCount: _filteredCourses.length,
-                ),
-              ),
+              onPressed: () {
+                // Route to catalog tab
+                Navigator.pushReplacement(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const CatalogScreen(actionType: 'courses', title: 'Explore Courses'))
+                );
+              },
+              child: const Text('Explore Courses', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildCourseCard(Map<String, dynamic> course) {
+  Widget _buildCourseCard(Map<String, dynamic> course, bool isDark, Color textColor, Color subTextColor) {
     String rawThumb = course['thumbnail_url']?.toString() ?? '';
     if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
       rawThumb = 'https://academy.kainuwa.africa/$rawThumb';
     }
 
-    double progressRaw = double.tryParse(course['progress_percentage'].toString()) ?? 0.0;
-    int progress = progressRaw.toInt();
+    int progress = int.tryParse(course['progress_percentage']?.toString() ?? '0') ?? 0;
     bool isCompleted = progress >= 100;
     bool hasStarted = progress > 0;
 
-    return Container(
+    return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
+      // Card color is handled by our app_theme.dart!
       child: InkWell(
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(
-            builder: (context) => CoursePlayerScreen(courseId: int.parse(course['id'].toString()), courseTitle: course['title'])
-          ));
+          Navigator.push(
+            context, 
+            MaterialPageRoute(
+              builder: (context) => CoursePlayerScreen(
+                courseId: int.parse(course['id'].toString()), 
+                courseTitle: course['title']
+              )
+            )
+          ).then((value) => _fetchMyCourses()); // Refresh progress when returning
         },
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail with Play Icon Overlay
+            // Thumbnail
             SizedBox(
-              width: 120,
-              height: 130,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  rawThumb.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: rawThumb,
-                          fit: BoxFit.cover,
-                          errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: const Icon(Icons.school, color: Colors.white)),
-                        )
-                      : Container(color: AppTheme.primaryColor, child: const Icon(Icons.school, size: 40, color: Colors.white)),
-                  Container(color: Colors.black.withOpacity(0.2)),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                      child: Icon(isCompleted ? Icons.replay : Icons.play_arrow, color: AppTheme.primaryColor, size: 24),
-                    ),
-                  )
-                ],
-              ),
+              height: 110,
+              width: 110,
+              child: rawThumb.isNotEmpty
+                  ? Image.network(rawThumb, fit: BoxFit.cover)
+                  : Container(color: AppTheme.primaryColor, child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40)),
             ),
-
-            // Details Section
+            
+            // Details
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -261,18 +248,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      course['title']?.toString() ?? 'Untitled', 
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, height: 1.2), 
+                      course['title'], 
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor), 
                       maxLines: 2, 
                       overflow: TextOverflow.ellipsis
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.person, size: 12, color: Colors.grey.shade500),
-                        const SizedBox(width: 4),
-                        Expanded(child: Text(course['instructor_name']?.toString() ?? 'Kainuwa', style: TextStyle(color: Colors.grey.shade600, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      course['instructor_name'], 
+                      style: TextStyle(color: subTextColor, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 12),
                     
@@ -284,7 +270,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: progress / 100,
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey[200],
                               color: isCompleted ? Colors.green : AppTheme.primaryColor,
                               minHeight: 6,
                             ),
@@ -300,13 +286,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isCompleted ? Colors.green.withOpacity(0.1) : (hasStarted ? AppTheme.primaryColor.withOpacity(0.1) : Colors.grey.shade100),
+                        color: isCompleted 
+                            ? Colors.green.withOpacity(isDark ? 0.2 : 0.1) 
+                            : (hasStarted ? AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.1) : (isDark ? Colors.grey.shade800 : Colors.grey.shade100)),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         isCompleted ? 'Completed' : (hasStarted ? 'Continue Learning' : 'Start Course'),
                         style: TextStyle(
-                          color: isCompleted ? Colors.green : (hasStarted ? AppTheme.primaryColor : Colors.grey.shade700),
+                          color: isCompleted 
+                              ? (isDark ? Colors.green.shade400 : Colors.green) 
+                              : (hasStarted ? (isDark ? Colors.purple.shade300 : AppTheme.primaryColor) : subTextColor),
                           fontSize: 10,
                           fontWeight: FontWeight.bold
                         ),
