@@ -43,12 +43,24 @@ jobs:
       run: |
         flutter build apk --release --split-per-abi
         flutter build appbundle --release
+      
+    - name: Sign 64-bit APK (For Direct Download)
+      run: |
+        BUILD_TOOLS=$(ls $ANDROID_SDK_ROOT/build-tools | sort -n | tail -1)
+        $ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner sign --ks kaida-key.jks --ks-pass pass:kainuwa2026 --key-pass pass:kainuwa2026 build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
         
     - name: Upload 64-bit APK
       uses: actions/upload-artifact@v4
       with:
         name: Kaida-Learn-Optimized-APK
         path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+        
+    - name: Strip Debug Signature and Sign Play Store Bundle
+      run: |
+        # 1. Physically delete the generic debug signature Flutter automatically added
+        zip -d build/app/outputs/bundle/release/app-release.aab "META-INF/*.RSA" "META-INF/*.SF" "META-INF/*.MF" || true
+        # 2. Sign the clean bundle with your official Kaida key
+        jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore kaida-key.jks -storepass kainuwa2026 build/app/outputs/bundle/release/app-release.aab kaida
         
     - name: Upload Play Store Bundle
       uses: actions/upload-artifact@v4
