@@ -52,7 +52,7 @@ jobs:
     - name: Upload 64-bit APK
       uses: actions/upload-artifact@v4
       with:
-        name: Kainuwa-Academy-Optimized-APK
+        name: Kaida-Learn-Optimized-APK
         path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
         
     - name: Sign App Bundle (For Google Play Store)
@@ -62,5 +62,5 @@ jobs:
     - name: Upload Play Store Bundle
       uses: actions/upload-artifact@v4
       with:
-        name: Kainuwa-Academy-PlayStore-AAB
+        name: Kaida-Learn-PlayStore-AAB
         path: build/app/outputs/bundle/release/app-release.aab

@@ -79,7 +79,7 @@ class _SplashScreenState extends State<SplashScreen> {
           children: const [
             Icon(Icons.school, size: 80, color: Colors.white),
             SizedBox(height: 20),
-            Text('KAIDA LMS', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            Text('KAIDA LEARN', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
             SizedBox(height: 40),
             CircularProgressIndicator(color: Colors.white),
           ],
