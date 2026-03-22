@@ -31,7 +31,7 @@ class KaidaApp extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MaterialApp(
-      title: 'Kainuwa Academy',
+      title: 'Kaida Learn',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       themeMode: themeProvider.themeMode,

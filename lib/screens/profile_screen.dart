@@ -91,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             newUrl += '?t=${DateTime.now().millisecondsSinceEpoch}';
             
             setState(() => _avatarUrl = newUrl);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated on Kainuwa Academy!'), backgroundColor: Colors.green));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated on Kaida Learn!'), backgroundColor: Colors.green));
           } else {
             throw Exception(jsonResponse['message']);
           }

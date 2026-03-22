@@ -130,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Let the theme dictate the scaffold background instead of hardcoding it
       appBar: AppBar(
         backgroundColor: AppTheme.primaryColor,
-        title: const Text('Kainuwa Academy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+        title: const Text('Kaida Learn', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [

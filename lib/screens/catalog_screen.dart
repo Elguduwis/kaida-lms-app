@@ -49,7 +49,7 @@ class CatalogItem {
       slug: json['slug']?.toString() ?? '',
       title: json['title']?.toString() ?? 'Untitled',
       thumbnailUrl: rawThumb,
-      instructorName: json['instructor_name']?.toString() ?? json['username']?.toString() ?? 'Kainuwa',
+      instructorName: json['instructor_name']?.toString() ?? json['username']?.toString() ?? 'Kaida Learn',
       price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
       discountPrice: double.tryParse(json['discount_price']?.toString() ?? '0') ?? 0.0,
       isFree: (json['is_free']?.toString() == '1'),
