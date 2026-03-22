@@ -26,6 +26,25 @@
     },
     {
       "client_info": {
+        "mobilesdk_app_id": "1:678276904298:android:8030ed78068f6479d52113",
+        "android_client_info": {
+          "package_name": "com.kainuwa.academy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUWXWlr4LePnj-DSkQgfZ-_yVO6cgm7YQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:678276904298:android:4ad247bab61d62abd52113",
         "android_client_info": {
           "package_name": "com.kainuwa.app"
