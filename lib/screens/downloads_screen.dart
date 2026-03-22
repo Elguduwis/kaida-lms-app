@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
@@ -16,182 +15,136 @@ class DownloadsScreen extends StatefulWidget {
 
 class _DownloadsScreenState extends State<DownloadsScreen> {
   bool _isLoading = true;
-  List<dynamic> _digitalProducts = [];
+  List<dynamic> _downloads = [];
+  Set<int> _downloadingItems = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchDigitalDownloads();
+    _fetchDownloads();
   }
 
-  Future<void> _fetchDigitalDownloads() async {
+  Future<void> _fetchDownloads() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
-    
-    if (userId == null) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
-    }
+    if (userId == null) return;
 
     try {
-      // Assuming you have an endpoint for purchased digital products. 
-      // Adjust the URL if your endpoint is different!
-      final response = await http.post(
-        Uri.parse('https://academy.kainuwa.africa/api/mobile/my_downloads.php'), 
-        body: {'user_id': userId.toString()}
-      );
-
+      final response = await http.post(Uri.parse(ApiConfig.myDownloads), body: {'user_id': userId.toString()});
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && mounted) {
-          setState(() {
-            _digitalProducts = data['data'];
-            _isLoading = false;
-          });
-        } else {
-          if (mounted) setState(() => _isLoading = false);
+          setState(() => _downloads = data['data']);
         }
       }
     } catch (e) {
+      debugPrint("API Error: $e");
+    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _downloadFile(String fileUrl) async {
-    if (fileUrl.isEmpty) return;
+  // NATIVE DIRECT DOWNLOAD METHOD
+  Future<void> _startNativeDownload(int orderId, int itemId) async {
+    setState(() => _downloadingItems.add(itemId));
     
-    if (!fileUrl.startsWith('http')) {
-      fileUrl = 'https://academy.kainuwa.africa/' + fileUrl;
-    }
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
 
-    final Uri url = Uri.parse(fileUrl);
-    
     try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch download link.')));
+      final response = await http.post(
+        Uri.parse(ApiConfig.getDownloadLink),
+        body: {'user_id': userId.toString(), 'order_id': orderId.toString(), 'item_id': itemId.toString()},
+      );
+
+      final data = json.decode(response.body);
+      if (data['status'] == 'success') {
+        String downloadUrl = data['url'];
+        
+        // FIX: Ensure the URL is an absolute web address before launching!
+        if (!downloadUrl.startsWith('http')) {
+          downloadUrl = 'https://academy.kainuwa.africa/' + downloadUrl.replaceFirst(RegExp(r'^/+'), '');
+        }
+
+        final Uri url = Uri.parse(downloadUrl);
+        
+        // This launches the phone's native file downloader/browser!
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          throw Exception('Could not launch downloader');
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Error generating link')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error launching download.')));
+      debugPrint("Download error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to initiate download.')));
+    } finally {
+      setState(() => _downloadingItems.remove(itemId));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic Theme Detectors
+    // Dynamic Theme Detectors to prevent blinding white flashes in dark mode
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-    
-    // In your screenshot, the card was dark. We'll make it adapt slightly but keep that premium feel.
-    final cardColor = isDark ? AppTheme.darkSurfaceColor : const Color(0xFF1E1E21); 
-    final cardTextColor = Colors.white; 
-    final cardSubTextColor = Colors.grey.shade400;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey;
+    final cardColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
 
     return Scaffold(
+      // Scaffold background is now handled dynamically by your AppTheme
       appBar: AppBar(
-        title: const Text('My Digital Downloads', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: false,
+        title: const Text('My Digital Downloads', style: TextStyle(color: Colors.white, fontSize: 16)), 
+        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: AppTheme.primaryColor,
+        elevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-          : _digitalProducts.isEmpty
-              ? _buildEmptyState(textColor, subTextColor)
+          : _downloads.isEmpty
+              ? Center(child: Text('You have no digital downloads yet.', style: TextStyle(color: subTextColor, fontSize: 16)))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _digitalProducts.length,
+                  itemCount: _downloads.length,
                   itemBuilder: (context, index) {
-                    final item = _digitalProducts[index];
-                    
+                    final item = _downloads[index];
                     String rawThumb = item['thumbnail_url']?.toString() ?? '';
                     if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
-                      rawThumb = 'https://academy.kainuwa.africa/' + rawThumb;
+                      rawThumb = 'https://academy.kainuwa.africa/' + rawThumb.replaceFirst(RegExp(r'^/+'), '');
                     }
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: cardColor,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
-                        ],
+                    int orderId = int.tryParse(item['order_id']?.toString() ?? '0') ?? 0;
+                    int itemId = int.tryParse(item['item_id']?.toString() ?? '0') ?? 0;
+                    bool isDownloading = _downloadingItems.contains(itemId);
+
+                    return Card(
+                      color: cardColor,
+                      elevation: isDark ? 0 : 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: isDark ? BorderSide(color: Colors.grey.shade800) : BorderSide.none,
                       ),
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          // Thumbnail
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: SizedBox(
-                              width: 70,
-                              height: 70,
-                              child: rawThumb.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: rawThumb,
-                                      fit: BoxFit.cover,
-                                      errorWidget: (context, url, error) => Container(color: Colors.grey.shade800, child: const Icon(Icons.inventory_2, color: Colors.white)),
-                                    )
-                                  : Container(color: Colors.grey.shade800, child: const Icon(Icons.inventory_2, color: Colors.white)),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          
-                          // Details
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item['title'] ?? 'Digital Product',
-                                  style: TextStyle(color: cardTextColor, fontSize: 15, fontWeight: FontWeight.bold, height: 1.3),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Digital Product',
-                                  style: TextStyle(color: cardSubTextColor, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          
-                          // Download Button
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: const Icon(Icons.download, size: 16),
-                            label: const Text('Download', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                            onPressed: () {
-                              _downloadFile(item['file_url'] ?? item['download_link'] ?? '');
-                            },
-                          ),
-                        ],
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(12),
+                        leading: rawThumb.isNotEmpty 
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(rawThumb, width: 60, height: 60, fit: BoxFit.cover)
+                              )
+                            : Container(width: 60, height: 60, decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.inventory_2, color: Colors.white)),
+                        title: Text(item['title'] ?? 'Digital Product', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                        subtitle: Text('Digital Product', style: TextStyle(color: subTextColor, fontSize: 12)),
+                        trailing: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                          icon: isDownloading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.download, size: 16, color: Colors.white),
+                          label: Text(isDownloading ? 'Starting...' : 'Download', style: const TextStyle(color: Colors.white)),
+                          onPressed: (isDownloading || orderId == 0) ? null : () => _startNativeDownload(orderId, itemId),
+                        ),
                       ),
                     );
                   },
                 ),
-    );
-  }
-
-  Widget _buildEmptyState(Color textColor, Color subTextColor) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text('No digital products found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
-          const SizedBox(height: 8),
-          Text('Any digital files you purchase will appear here.', style: TextStyle(color: subTextColor)),
-        ],
-      ),
     );
   }
 }
