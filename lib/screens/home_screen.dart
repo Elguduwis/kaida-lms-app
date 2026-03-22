@@ -24,7 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<CatalogItem> _activeCourses = [];
   List<CatalogItem> _comingSoonCourses = [];
   
-  final String _userName = "Osama"; 
+  String _userName = "Learner"; 
 
   @override
   void initState() {
@@ -37,6 +37,8 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getInt('user_id');
+      final savedName = prefs.getString('username') ?? prefs.getString('full_name') ?? "Learner";
+      if (mounted) setState(() => _userName = savedName);
       if (userId == null) return;
 
       final response = await http.post(
