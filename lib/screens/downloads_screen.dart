@@ -1,8 +1,10 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../config/api_config.dart';
 import '../config/app_theme.dart';
 
 class DownloadsScreen extends StatefulWidget {
@@ -14,74 +16,63 @@ class DownloadsScreen extends StatefulWidget {
 
 class _DownloadsScreenState extends State<DownloadsScreen> {
   bool _isLoading = true;
-  List<Map<String, dynamic>> _downloads = [];
+  List<dynamic> _digitalProducts = [];
 
   @override
   void initState() {
     super.initState();
-    _loadDownloads();
+    _fetchDigitalDownloads();
   }
 
-  Future<void> _loadDownloads() async {
+  Future<void> _fetchDigitalDownloads() async {
     final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys();
-    List<Map<String, dynamic>> loaded = [];
+    final userId = prefs.getInt('user_id');
+    
+    if (userId == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
-    for (String key in keys) {
-      if (key.startsWith('offline_lesson_')) {
-        String path = prefs.getString(key)!;
-        File file = File(path);
-        
-        if (await file.exists()) {
-          int sizeInBytes = await file.length();
-          double sizeInMb = sizeInBytes / (1024 * 1024);
-          String lessonId = key.replaceFirst('offline_lesson_', '');
-          
-          loaded.add({
-            'key': key,
-            'path': path,
-            'lesson_id': lessonId,
-            'size': '${sizeInMb.toStringAsFixed(2)} MB',
-            // Since we don't have a local DB of titles, we use a generic placeholder
-            'title': 'Offline Lesson $lessonId', 
+    try {
+      // Assuming you have an endpoint for purchased digital products. 
+      // Adjust the URL if your endpoint is different!
+      final response = await http.post(
+        Uri.parse('https://academy.kainuwa.africa/api/mobile/my_downloads.php'), 
+        body: {'user_id': userId.toString()}
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && mounted) {
+          setState(() {
+            _digitalProducts = data['data'];
+            _isLoading = false;
           });
         } else {
-          // Cleanup missing files from SharedPreferences
-          await prefs.remove(key);
+          if (mounted) setState(() => _isLoading = false);
         }
       }
-    }
-
-    if (mounted) {
-      setState(() {
-        _downloads = loaded;
-        _isLoading = false;
-      });
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _deleteDownload(String key, String path) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(key);
+  Future<void> _downloadFile(String fileUrl) async {
+    if (fileUrl.isEmpty) return;
     
-    File file = File(path);
-    if (await file.exists()) {
-      await file.delete();
+    if (!fileUrl.startsWith('http')) {
+      fileUrl = 'https://academy.kainuwa.africa/' + fileUrl;
     }
-    
-    _loadDownloads();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download removed'), backgroundColor: Colors.red)
-      );
-    }
-  }
 
-  void _playVideo(String path, String title) {
-    Navigator.push(
-      context, 
-      MaterialPageRoute(builder: (context) => OfflinePlayerScreen(videoPath: path, title: title))
-    );
+    final Uri url = Uri.parse(fileUrl);
+    
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch download link.')));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error launching download.')));
+    }
   }
 
   @override
@@ -90,51 +81,98 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    
+    // In your screenshot, the card was dark. We'll make it adapt slightly but keep that premium feel.
+    final cardColor = isDark ? AppTheme.darkSurfaceColor : const Color(0xFF1E1E21); 
+    final cardTextColor = Colors.white; 
+    final cardSubTextColor = Colors.grey.shade400;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Downloads'),
-        centerTitle: true,
+        title: const Text('My Digital Downloads', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        centerTitle: false,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-          : _downloads.isEmpty
+          : _digitalProducts.isEmpty
               ? _buildEmptyState(textColor, subTextColor)
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: _downloads.length,
+                  itemCount: _digitalProducts.length,
                   itemBuilder: (context, index) {
-                    final item = _downloads[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.1),
-                            shape: BoxShape.circle,
+                    final item = _digitalProducts[index];
+                    
+                    String rawThumb = item['thumbnail_url']?.toString() ?? '';
+                    if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
+                      rawThumb = 'https://academy.kainuwa.africa/' + rawThumb;
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          // Thumbnail
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SizedBox(
+                              width: 70,
+                              height: 70,
+                              child: rawThumb.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      imageUrl: rawThumb,
+                                      fit: BoxFit.cover,
+                                      errorWidget: (context, url, error) => Container(color: Colors.grey.shade800, child: const Icon(Icons.inventory_2, color: Colors.white)),
+                                    )
+                                  : Container(color: Colors.grey.shade800, child: const Icon(Icons.inventory_2, color: Colors.white)),
+                            ),
                           ),
-                          child: const Icon(Icons.video_library, color: AppTheme.primaryColor),
-                        ),
-                        title: Text(item['title'], style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                        subtitle: Text(item['size'], style: TextStyle(color: subTextColor, fontSize: 12)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.play_circle_fill, color: AppTheme.primaryColor, size: 32),
-                              onPressed: () => _playVideo(item['path'], item['title']),
+                          const SizedBox(width: 16),
+                          
+                          // Details
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item['title'] ?? 'Digital Product',
+                                  style: TextStyle(color: cardTextColor, fontSize: 15, fontWeight: FontWeight.bold, height: 1.3),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Digital Product',
+                                  style: TextStyle(color: cardSubTextColor, fontSize: 12),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => _deleteDownload(item['key'], item['path']),
+                          ),
+                          const SizedBox(width: 12),
+                          
+                          // Download Button
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
-                          ],
-                        ),
-                        onTap: () => _playVideo(item['path'], item['title']),
+                            icon: const Icon(Icons.download, size: 16),
+                            label: const Text('Download', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            onPressed: () {
+                              _downloadFile(item['file_url'] ?? item['download_link'] ?? '');
+                            },
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -147,96 +185,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cloud_download_outlined, size: 80, color: Colors.grey.shade400),
+          Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey.shade400),
           const SizedBox(height: 16),
-          Text('No downloads yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
+          Text('No digital products found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 8),
-          Text(
-            'Save videos to watch them offline.',
-            style: TextStyle(color: subTextColor),
-          ),
+          Text('Any digital files you purchase will appear here.', style: TextStyle(color: subTextColor)),
         ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// OFFLINE VIDEO PLAYER SCREEN
-// ==========================================
-class OfflinePlayerScreen extends StatefulWidget {
-  final String videoPath;
-  final String title;
-
-  const OfflinePlayerScreen({Key? key, required this.videoPath, required this.title}) : super(key: key);
-
-  @override
-  _OfflinePlayerScreenState createState() => _OfflinePlayerScreenState();
-}
-
-class _OfflinePlayerScreenState extends State<OfflinePlayerScreen> {
-  late VideoPlayerController _videoController;
-  ChewieController? _chewieController;
-  bool _hasError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initPlayer();
-  }
-
-  Future<void> _initPlayer() async {
-    try {
-      final file = File(widget.videoPath);
-      if (!await file.exists()) {
-        setState(() => _hasError = true);
-        return;
-      }
-
-      _videoController = VideoPlayerController.file(file);
-      await _videoController.initialize();
-      
-      if (mounted) {
-        setState(() {
-          _chewieController = ChewieController(
-            videoPlayerController: _videoController,
-            autoPlay: true,
-            looping: false,
-            allowPlaybackSpeedChanging: true,
-            errorBuilder: (context, errorMessage) {
-              return Center(child: Text('Playback Error: $errorMessage', style: const TextStyle(color: Colors.white)));
-            },
-          );
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _hasError = true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _videoController.dispose();
-    _chewieController?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black, // Video players should always have a black background
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 16)),
-        elevation: 0,
-      ),
-      body: Center(
-        child: _hasError
-            ? const Text('Error loading video file. It may be corrupted or deleted.', style: TextStyle(color: Colors.red))
-            : (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized)
-                ? Chewie(controller: _chewieController!)
-                : const CircularProgressIndicator(color: AppTheme.primaryColor),
       ),
     );
   }
