@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -102,7 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildSearchBar(isDark, textColor, subTextColor),
           Expanded(
             child: _isLoading 
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+              ? const Center(child: KaidaLoader())
               : RefreshIndicator(
                   color: AppTheme.primaryColor,
                   onRefresh: _fetchMyCourses,

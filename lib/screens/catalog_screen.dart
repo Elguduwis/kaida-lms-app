@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -303,7 +304,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
           if (_isLoading)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)))
+            const SliverFillRemaining(child: Center(child: KaidaLoader()))
           else if (_filteredItems.isEmpty)
             SliverFillRemaining(
               child: Center(

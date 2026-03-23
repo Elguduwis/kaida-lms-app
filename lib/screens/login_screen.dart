@@ -242,7 +242,7 @@ class _AuthWebViewScreenState extends State<AuthWebViewScreen> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_isLoading) const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+            if (_isLoading) const Center(child: KaidaLoader()),
           ],
         ),
       ),

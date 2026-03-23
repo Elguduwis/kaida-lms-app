@@ -158,7 +158,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
     return Scaffold(
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+        ? const Center(child: KaidaLoader())
         : CustomScrollView(
             slivers: [
               // 1. Collapsing Hero Header (with Intro Video)
@@ -465,7 +465,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_isLoading) const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+            if (_isLoading) const Center(child: KaidaLoader()),
           ],
         ),
       ),

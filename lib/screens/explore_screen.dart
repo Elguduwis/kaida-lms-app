@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -66,7 +67,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (!_isInit) {
       return const Scaffold(
         backgroundColor: AppTheme.backgroundColor,
-        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
+        body: Center(child: KaidaLoader()),
       );
     }
 
