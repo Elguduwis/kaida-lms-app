@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -337,7 +338,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
     return Scaffold(
       // Using AppTheme.backgroundColor directly looks bad in Dark Mode, letting Scaffold handle it based on Theme
       body: _isLoading
-          ? const Center(child: KaidaLoader())
+          ? Center(child: KaidaLoader())
           : Column(
               children: [
                 Container(
@@ -529,7 +530,7 @@ class _CoursePlayerScreenState extends State<CoursePlayerScreen> {
       if (_videoController != null && _videoController!.value.hasError) {
          return const Center(child: Text('Error loading video. Please check your connection.', style: TextStyle(color: Colors.red)));
       }
-      return const Center(child: KaidaLoader());
+      return Center(child: KaidaLoader());
     } else {
       return const Center(child: Icon(Icons.article, size: 60, color: Colors.white54));
     }

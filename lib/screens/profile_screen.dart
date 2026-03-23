@@ -256,7 +256,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       // Let Scaffold use Theme background
       body: _isLoading 
-        ? const Center(child: KaidaLoader()) // INJECTED KAIDA LOADER HERE
+        ? Center(child: KaidaLoader()) // INJECTED KAIDA LOADER HERE
         : SingleChildScrollView(
             child: Column(
               children: [
@@ -474,7 +474,7 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_isLoading) const Center(child: KaidaLoader()), // INJECTED KAIDA LOADER HERE
+          if (_isLoading) Center(child: KaidaLoader()), // INJECTED KAIDA LOADER HERE
         ],
       ),
     );

@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -158,7 +159,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
     return Scaffold(
       body: _isLoading 
-        ? const Center(child: KaidaLoader())
+        ? Center(child: KaidaLoader())
         : CustomScrollView(
             slivers: [
               // 1. Collapsing Hero Header (with Intro Video)
@@ -465,7 +466,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_isLoading) const Center(child: KaidaLoader()),
+            if (_isLoading) Center(child: KaidaLoader()),
           ],
         ),
       ),

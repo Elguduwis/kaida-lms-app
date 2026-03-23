@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -100,7 +101,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: KaidaLoader())
+          ? Center(child: KaidaLoader())
           : _downloads.isEmpty
               ? Center(child: Text('You have no digital downloads yet.', style: TextStyle(color: subTextColor, fontSize: 16)))
               : ListView.builder(

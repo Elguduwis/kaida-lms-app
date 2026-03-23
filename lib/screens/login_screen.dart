@@ -1,3 +1,4 @@
+import '../widgets/kaida_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../config/app_theme.dart';
@@ -242,7 +243,7 @@ class _AuthWebViewScreenState extends State<AuthWebViewScreen> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_isLoading) const Center(child: KaidaLoader()),
+            if (_isLoading) Center(child: KaidaLoader()),
           ],
         ),
       ),

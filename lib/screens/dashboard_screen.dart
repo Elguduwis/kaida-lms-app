@@ -103,7 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildSearchBar(isDark, textColor, subTextColor),
           Expanded(
             child: _isLoading 
-              ? const Center(child: KaidaLoader())
+              ? Center(child: KaidaLoader())
               : RefreshIndicator(
                   color: AppTheme.primaryColor,
                   onRefresh: _fetchMyCourses,
