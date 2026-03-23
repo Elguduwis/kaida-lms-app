@@ -15,4 +15,5 @@ class ApiConfig {
   static const String getDownloadLink = '$baseUrl/get_download_link.php';
   static const String changePassword = '$baseUrl/change_password.php';
   static const String saveFcmToken = '$baseUrl/save_fcm_token.php';
+  static const String appSettings = '$baseUrl/app_settings.php';
 }
