@@ -20,6 +20,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
     - name: Setup Shorebird
       uses: shorebirdtech/setup-shorebird@v1
         
