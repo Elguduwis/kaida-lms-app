@@ -1,10 +1,11 @@
-import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
+import '../widgets/kaida_loader.dart';
 import 'course_player_screen.dart';
 import 'catalog_screen.dart';
 import 'item_details_screen.dart';
@@ -27,11 +28,36 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _userName = "Learner"; 
 
+  // SERVER-DRIVEN UI VARIABLES
+  bool _showPromoBanner = false;
+  String _promoImageUrl = "";
+  String _promoLinkUrl = "";
+
   @override
   void initState() {
     super.initState();
     _fetchDashboardData();
     _fetchCatalogData();
+    _fetchPromoData(); // Fetch the dynamic UI rules
+  }
+
+  // --- NEW: Listens to the Admin Panel ---
+  Future<void> _fetchPromoData() async {
+    try {
+      final response = await http.get(Uri.parse(ApiConfig.appSettings));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && mounted) {
+          setState(() {
+            _showPromoBanner = data['data']['promo_enabled'] == '1';
+            _promoImageUrl = data['data']['promo_image'] ?? '';
+            _promoLinkUrl = data['data']['promo_link'] ?? '';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Promo error: $e");
+    }
   }
 
   Future<void> _fetchDashboardData() async {
@@ -78,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
           for (var item in list) {
             try {
-              // 1. Check the database release_date against today's actual date
               bool isComingSoon = false;
               if (item['release_date'] != null) {
                 DateTime? release = DateTime.tryParse(item['release_date'].toString());
@@ -87,10 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               }
               
-              // 2. Parse it using your existing model
               CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
               
-              // 3. Sort into the correct UI list
               if (isComingSoon) {
                 coming.add(parsed);
               } else {
@@ -114,7 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Safely partitions lists into UI carousels
   List<CatalogItem> _getSubList(List<CatalogItem> source, int startIndex, int count) {
     if (source.isEmpty) return [];
     int safeStart = startIndex % source.length;
@@ -130,7 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Let the theme dictate the scaffold background instead of hardcoding it
       appBar: AppBar(
         backgroundColor: AppTheme.primaryColor,
         title: const Text('Kaida Learn', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
@@ -145,6 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: () async {
           await _fetchDashboardData();
           await _fetchCatalogData();
+          await _fetchPromoData(); // Refresh banner state
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -152,8 +174,15 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Sleek Header (Wallet Removed)
+              // 1. Sleek Header
               _buildHeaderSection(),
+              
+              // --- NEW: DYNAMIC PROMO BANNER ---
+              if (_showPromoBanner && _promoImageUrl.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _buildPromoBanner(),
+              ],
+              
               const SizedBox(height: 24),
 
               // 2. Categories
@@ -176,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // 4. Dynamic Carousels
               if (_isLoadingCatalog)
-                 const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: AppTheme.primaryColor)))
+                 const Center(child: Padding(padding: EdgeInsets.all(40), child: KaidaLoader()))
               else ...[
                 _buildHorizontalSection('Featured Courses', _getSubList(_activeCourses, 0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
                 const SizedBox(height: 30),
@@ -187,12 +216,44 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildHorizontalSection('Popular Now', _getSubList(_activeCourses, 1, 4), badgeText: 'HOT', badgeColor: Colors.redAccent),
                 const SizedBox(height: 30),
 
-                // Automatically populates from DB based on release_date!
                 if (_comingSoonCourses.isNotEmpty)
                   _buildHorizontalSection('Coming Soon', _comingSoonCourses, isComingSoon: true),
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // --- NEW: Promo Banner Widget ---
+  Widget _buildPromoBanner() {
+    return GestureDetector(
+      onTap: () async {
+        if (_promoLinkUrl.isNotEmpty) {
+          final uri = Uri.parse(_promoLinkUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        width: double.infinity,
+        height: 140, // Nice landscape size
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          image: DecorationImage(
+            image: NetworkImage(_promoImageUrl),
+            fit: BoxFit.cover,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15), 
+              blurRadius: 10, 
+              offset: const Offset(0, 4)
+            )
+          ]
         ),
       ),
     );
@@ -241,7 +302,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  // Dynamic background and border based on theme
                   color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
@@ -304,7 +364,6 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 200, 
       margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        // Dynamic card background color
         color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
@@ -356,7 +415,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  // Removed hardcoded text color so it adapts to theme
                   Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
@@ -366,7 +424,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           item.instructorName, 
-                          // Dynamic gray text
                           style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey[600], fontSize: 11), 
                           maxLines: 1, 
                           overflow: TextOverflow.ellipsis
@@ -417,7 +474,6 @@ class _HomeScreenState extends State<HomeScreen> {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
-      // Card uses theme automatically, no hardcoded background
       child: InkWell(
         onTap: () {
           Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: int.parse(course['id'].toString()), courseTitle: course['title'])));
@@ -437,14 +493,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
                       value: double.parse(course['progress_percentage'].toString()) / 100,
-                      // Dynamic background for the progress bar
                       backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey[200],
                       color: AppTheme.primaryColor,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${course['progress_percentage']}% Complete', 
-                      // Dynamic grey text
                       style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey[600], fontSize: 11)
                     ),
                   ],
