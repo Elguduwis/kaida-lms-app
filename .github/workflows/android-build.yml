@@ -1,81 +1,63 @@
-name: Android CI
+name: Kaida Learn Shorebird CI
 
 on:
   push:
     branches: [ "main", "master" ]
 
 jobs:
-  build:
+  shorebird-deploy:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+      with:
+        fetch-depth: 0
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+
+    - name: Setup Shorebird
+      uses: shorebirdtech/setup-shorebird@v1
         
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        channel: 'stable'
-        
-    - name: Generate Platform Folders
-      run: flutter create --platforms=android .
-        
-    - name: Inject App Name and Permissions
+    - name: Generate Platform Folders & Run Setup
       run: |
+        flutter create --platforms=android .
         sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
         sed -i 's/android:label="kaida_app"/android:label="Kaida Learn"/g' android/app/src/main/AndroidManifest.xml
-        
-    - name: Install dependencies
-      run: flutter pub get
-      
-    - name: Generate Icons and Splash
-      run: |
+        flutter pub get
         flutter pub run flutter_launcher_icons
         flutter pub run flutter_native_splash:create
-      
-    - name: Build Split APKs and App Bundle
-      run: |
-        flutter build apk --release --split-per-abi
-        flutter build appbundle --release
-        
-    - name: Decode Keystore from Secrets
+
+    - name: Build Shorebird Release (Base AAB)
+      if: contains(github.event.head_commit.message, '[release]')
+      env:
+        SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+      run: shorebird release android --artifact=aab --force
+
+    - name: Decode Keystore & Sign Play Store Bundle
+      if: contains(github.event.head_commit.message, '[release]')
       env:
         ENCODED_KEYSTORE: ${{ secrets.KAIDA_KEY_JKS_BASE64 }}
+        STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KAIDA_KEY_PASSWORD }}
       run: |
         echo "$ENCODED_KEYSTORE" | base64 --decode --ignore-garbage > kaida_upload_key.jks
-      
-    - name: Sign 64-bit APK (For Direct Download)
-      env:
-        STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KAIDA_KEY_PASSWORD }}
-      run: |
-        BUILD_TOOLS=$(ls $ANDROID_SDK_ROOT/build-tools | sort -n | tail -1)
-        $ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner sign --ks kaida_upload_key.jks --ks-pass pass:$STORE_PASSWORD --key-pass pass:$KEY_PASSWORD build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-        
-    - name: Upload 64-bit APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: Kaida-Learn-Optimized-APK
-        path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-        
-    - name: Strip Debug Signature and Sign Play Store Bundle
-      env:
-        STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KAIDA_KEY_PASSWORD }}
-      run: |
-        # 1. Physically delete the generic debug signature Flutter automatically added
         zip -d build/app/outputs/bundle/release/app-release.aab "META-INF/*.RSA" "META-INF/*.SF" "META-INF/*.MF" || true
-        # 2. Sign the clean bundle with your official Kaida key and alias from the history
         jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore kaida_upload_key.jks -storepass $STORE_PASSWORD -keypass $KEY_PASSWORD build/app/outputs/bundle/release/app-release.aab kaida_upload_alias
-        
-    - name: Upload Play Store Bundle
+
+    - name: Upload Signed Play Store Bundle
+      if: contains(github.event.head_commit.message, '[release]')
       uses: actions/upload-artifact@v4
       with:
-        name: Kaida-Learn-PlayStore-AAB
+        name: Kaida-Learn-Shorebird-AAB
         path: build/app/outputs/bundle/release/app-release.aab
+
+    - name: Push Live OTA Update to Users
+      if: "!contains(github.event.head_commit.message, '[release]')"
+      env:
+        SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+      run: shorebird patch android --force
