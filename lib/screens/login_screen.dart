@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../config/app_theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/kaida_loader.dart';
 import 'main_layout.dart';
-import 'dart:ui' as ui;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -74,278 +74,232 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final size = MediaQuery.of(context).size;
     
-    // Aesthetic Colors Based on Theme
-    final textColor = isDark ? Colors.white : AppTheme.secondaryColor;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-    final cardColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
-    final inputFillColor = isDark ? Colors.grey.shade900 : Colors.grey.shade50;
-    final inputBorderColor = isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200;
+    // Minimalist Colors
+    final bgColor = isDark ? AppTheme.darkBackgroundColor : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final hintColor = isDark ? Colors.grey.shade500 : Colors.grey.shade400;
+    final inputBorderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
+    final inputFillColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
+    final socialBtnColor = isDark ? Colors.grey.shade800 : const Color(0xFFF5F5F5);
 
     return Scaffold(
-      backgroundColor: cardColor,
-      body: Stack(
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+                // 1. Minimalist Title
+                Text(
+                  'Login',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 40),
+
+                // 2. Email Field
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: "Email",
+                    hintStyle: TextStyle(color: hintColor, fontSize: 15),
+                    prefixIcon: Icon(Icons.mail_outline_rounded, color: hintColor, size: 22),
+                    filled: true,
+                    fillColor: inputFillColor,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30), 
+                      borderSide: BorderSide(color: inputBorderColor, width: 1.5)
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30), 
+                      borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Password Field
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: "Password",
+                    hintStyle: TextStyle(color: hintColor, fontSize: 15),
+                    prefixIcon: Icon(Icons.lock_outline_rounded, color: hintColor, size: 22),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, 
+                        color: hintColor, 
+                        size: 20
+                      ),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      splashRadius: 20,
+                    ),
+                    filled: true,
+                    fillColor: inputFillColor,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30), 
+                      borderSide: BorderSide(color: inputBorderColor, width: 1.5)
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30), 
+                      borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 4. Centered Forgot Password
+                Center(
+                  child: TextButton(
+                    onPressed: () => _openWebFlow('Reset Password', 'https://academy.kainuwa.africa/forgot_password.php'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: subTextColor(isDark),
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600, 
+                        fontSize: 13, 
+                        decoration: TextDecoration.underline,
+                        decorationColor: subTextColor(isDark),
+                        color: subTextColor(isDark)
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 5. Primary Login Button (Stadium shape)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    elevation: 0,
+                  ),
+                  onPressed: _isLoading ? null : _handleLogin,
+                  child: _isLoading
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                      : const Text('Login', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 32),
+
+                // 6. Divider "or"
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: inputBorderColor)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text("or", style: TextStyle(color: hintColor, fontSize: 13, fontWeight: FontWeight.w500)),
+                    ),
+                    Expanded(child: Divider(color: inputBorderColor)),
+                  ],
+                ),
+                const SizedBox(height: 32),
+
+                // 7. Continue with Google
+                _buildAlternativeLoginBtn(
+                  icon: const FaIcon(FontAwesomeIcons.google, color: Colors.blue, size: 20),
+                  text: "Continue with Google",
+                  bgColor: socialBtnColor,
+                  textColor: textColor,
+                  onTap: () {
+                    _showSnackBar("Google Login coming soon!", AppTheme.primaryColor);
+                  }
+                ),
+                const SizedBox(height: 16),
+
+                // 8. Continue with Apple (Uses primary color like the reference image's green)
+                _buildAlternativeLoginBtn(
+                  icon: const FaIcon(FontAwesomeIcons.apple, color: Colors.white, size: 22),
+                  text: "Continue with Apple",
+                  bgColor: AppTheme.primaryColor.withOpacity(0.9), // Using Kainuwa color for emphasis
+                  textColor: Colors.white,
+                  onTap: () {
+                    _showSnackBar("Apple Login coming soon!", AppTheme.primaryColor);
+                  }
+                ),
+                const SizedBox(height: 16),
+
+                // 9. Continue As Guest
+                _buildAlternativeLoginBtn(
+                  icon: Icon(Icons.person_outline_rounded, color: textColor, size: 22),
+                  text: "Continue As Guest",
+                  bgColor: socialBtnColor,
+                  textColor: textColor,
+                  onTap: () {
+                     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainLayout()));
+                  }
+                ),
+                const SizedBox(height: 40),
+
+                // 10. Bottom Sign Up Link
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Need an account? ", style: TextStyle(color: subTextColor(isDark), fontSize: 14, fontWeight: FontWeight.w500)),
+                    GestureDetector(
+                      onTap: () => _openWebFlow('Create Account', 'https://academy.kainuwa.africa/register.php'),
+                      child: Text('Sign up', style: TextStyle(color: textColor, fontWeight: FontWeight.w800, fontSize: 14)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color subTextColor(bool isDark) => isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+
+  Widget _buildAlternativeLoginBtn({
+    required Widget icon, 
+    required String text, 
+    required Color bgColor, 
+    required Color textColor,
+    required VoidCallback onTap
+  }) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: bgColor,
+        foregroundColor: textColor,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      ),
+      onPressed: onTap,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // 1. Modern Gradient Header with Curve
-          CustomPaint(
-            size: Size(size.width, 320),
-            painter: ModernCurvePainter(),
-          ),
-          
-          // 2. Header Content (Logo/Text)
-          SafeArea(
-            child: Container(
-              width: double.infinity,
-              height: 200,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Refined School Icon Logo
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1)
-                    ),
-                    child: const Icon(Icons.school, size: 40, color: Colors.white),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Kainuwa Academy',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Kaida Learn - The Future of Learning',
-                    style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // 3. Main Form Section (Scrollable)
-          Positioned.fill(
-            top: 250, // Starts below the curve peak
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Welcome Back!',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.primaryColor),
-                  ),
-                  const SizedBox(height: 28),
-                  
-                  // Polished Email Input
-                  _buildInputLabel("Email Address", subTextColor),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: "example@email.com",
-                      hintStyle: TextStyle(color: subTextColor.withOpacity(0.5), fontSize: 14),
-                      prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.primaryColor, size: 20),
-                      filled: true,
-                      fillColor: inputFillColor,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: inputBorderColor)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Polished Password Input
-                  _buildInputLabel("Password", subTextColor),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: "••••••••",
-                      hintStyle: TextStyle(color: subTextColor.withOpacity(0.5), fontSize: 14),
-                      prefixIcon: const Icon(Icons.lock_clock_outlined, color: AppTheme.primaryColor, size: 20),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: subTextColor.withOpacity(0.5), size: 20),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                        splashRadius: 20,
-                      ),
-                      filled: true,
-                      fillColor: inputFillColor,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: inputBorderColor)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Refined Forgot Password Link
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => _openWebFlow('Reset Password', 'https://academy.kainuwa.africa/forgot_password.php'),
-                      style: TextButton.styleFrom(foregroundColor: AppTheme.primaryColor, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                      child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Premium Modern Login Button
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 8,
-                      shadowColor: AppTheme.primaryColor.withOpacity(0.5),
-                    ),
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                        : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.2)),
-                  ),
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Social Login Section (Matches Screenshot Aesthetic)
-                  _buildSocialLoginSection(subTextColor, inputBorderColor, cardColor),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Refined Sign Up Link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("New learner? ", style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: FontWeight.w500)),
-                      GestureDetector(
-                        onTap: () => _openWebFlow('Create Account', 'https://academy.kainuwa.africa/register.php'),
-                        child: const Text('Create Account', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w800, fontSize: 14)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+          icon,
+          const SizedBox(width: 12),
+          Text(text, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textColor)),
         ],
       ),
     );
-  }
-
-  Widget _buildInputLabel(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0),
-      child: Text(label, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
-    );
-  }
-
-  Widget _buildSocialLoginSection(Color textColor, Color borderColor, Color cardColor) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(child: Divider(color: borderColor)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text("or login with", style: TextStyle(color: textColor.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-            Expanded(child: Divider(color: borderColor)),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _buildSocialCard("assets/images/google_logo.png", borderColor, cardColor),
-            const SizedBox(width: 16),
-            _buildSocialCard("assets/images/facebook_logo.png", borderColor, cardColor),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialCard(String assetPath, Color borderColor, Color cardColor) {
-    return Container(
-      width: 80,
-      height: 56,
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(color: AppTheme.primaryColor.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))
-        ]
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {}, 
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Image.asset(
-              assetPath, 
-              height: 24, 
-              errorBuilder: (context, error, stackTrace) => const Icon(Icons.language, size: 24, color: AppTheme.primaryColor),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- Custom Painter for the Modern Curved Header ---
-class ModernCurvePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    Paint paint = Paint();
-    
-    // Kainuwa Purple Gradient
-    paint.shader = ui.Gradient.linear(
-      Offset(0, size.height * 0.2), 
-      Offset(size.width, size.height), 
-      [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.85)],
-      [0.0, 1.0]
-    );
-    paint.style = PaintingStyle.fill;
-
-    // Drawing the modern, pronounced concave curve
-    Path path = Path();
-    path.lineTo(0, size.height * 0.7); 
-    
-    // First Control Point and End Point for the wave
-    var firstControlPoint = Offset(size.width / 4, size.height);
-    var firstEndPoint = Offset(size.width / 2, size.height * 0.85); 
-    path.quadraticBezierTo(firstControlPoint.dx, firstControlPoint.dy, firstEndPoint.dx, firstEndPoint.dy);
-    
-    // Second Control Point and End Point for the wave
-    var secondControlPoint = Offset(size.width - (size.width / 4), size.height * 0.7);
-    var secondEndPoint = Offset(size.width, size.height * 0.9);
-    path.quadraticBezierTo(secondControlPoint.dx, secondControlPoint.dy, secondEndPoint.dx, secondEndPoint.dy);
-
-    path.lineTo(size.width, 0); 
-    path.close(); 
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
   }
 }
 
