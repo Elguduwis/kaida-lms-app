@@ -15,8 +15,10 @@ class _KaidaLoaderState extends State<KaidaLoader> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    // 2-second continuous loop
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000))..repeat();
+    _controller = AnimationController(
+      vsync: this, 
+      duration: const Duration(milliseconds: 1500)
+    )..repeat();
   }
 
   @override
@@ -34,55 +36,59 @@ class _KaidaLoaderState extends State<KaidaLoader> with SingleTickerProviderStat
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // The Base Circle border
-            Container(
-              width: 70, height: 70,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.primaryColor.withOpacity(0.05),
-                border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 2),
-              ),
-            ),
-            // The Animated Icons bubbling up
-            ClipOval(
-              child: SizedBox(
-                width: 70, height: 70,
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, child) {
-                    return Stack(
-                      children: [
-                        _buildMovingIcon(Icons.school, 0.0),      // Campus
-                        _buildMovingIcon(Icons.build, 0.33),      // Tools
-                        _buildMovingIcon(Icons.settings, 0.66),   // Gear
-                      ],
-                    );
-                  },
+            // Outer Reverse Spinning Ring
+            RotationTransition(
+              turns: Tween(begin: 1.0, end: 0.0).animate(_controller),
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.primaryColor.withOpacity(0.15), width: 3),
+                ),
+                child: const CircularProgressIndicator(
+                  value: 0.75,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                  strokeWidth: 3,
+                  backgroundColor: Colors.transparent,
                 ),
               ),
             ),
+            // Inner Fast Spinning Ring
+            RotationTransition(
+              turns: _controller,
+              child: SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(
+                  value: 0.4,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor.withOpacity(0.6)),
+                  strokeWidth: 2,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            ),
+            // Pulsing Center Icon
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                // Sine wave pulse effect
+                double scale = 0.85 + (0.15 * math.sin(_controller.value * math.pi * 2));
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.school, color: AppTheme.primaryColor, size: 22),
+                  ),
+                );
+              },
+            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildMovingIcon(IconData icon, double delay) {
-    // Calculate animation position based on delay
-    double animValue = (_controller.value + delay) % 1.0;
-    
-    // Move from bottom (70) to top (-20)
-    double yPos = 70 - (animValue * 90);
-    
-    // Fade in at the bottom, fade out at the top using a sine wave
-    double opacity = math.sin(animValue * math.pi); 
-    
-    return Positioned(
-      left: 23, // Center horizontally (70/2 - 24/2)
-      top: yPos,
-      child: Opacity(
-        opacity: opacity.clamp(0.0, 1.0),
-        child: Icon(icon, color: AppTheme.primaryColor, size: 24),
       ),
     );
   }
