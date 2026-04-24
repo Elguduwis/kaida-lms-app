@@ -268,9 +268,9 @@ class _LoginScreenState extends State<LoginScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildSocialCard("assets/images/google_logo.png", borderColor, cardColor), // Note: Assets required or replace with icons
+            _buildSocialCard("assets/images/google_logo.png", borderColor, cardColor),
             const SizedBox(width: 16),
-            _buildSocialCard("assets/images/facebook_logo.png", borderColor, cardColor), // Note: Assets required or replace with icons
+            _buildSocialCard("assets/images/facebook_logo.png", borderColor, cardColor),
           ],
         ),
       ],
@@ -278,7 +278,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildSocialCard(String assetPath, Color borderColor, Color cardColor) {
-    // Note: If you don't have these assets yet, I've added error handling to show a generic icon.
     return Container(
       width: 80,
       height: 56,
@@ -293,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onPressed: () {}, // Not implemented yet
+          onTap: () {}, 
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -317,20 +316,20 @@ class ModernCurvePainter extends CustomPainter {
     
     // Kainuwa Purple Gradient
     paint.shader = ui.Gradient.linear(
-      Offset(0, size.height * 0.2), // Gradient start
-      Offset(size.width, size.height), // Gradient end
+      Offset(0, size.height * 0.2), 
+      Offset(size.width, size.height), 
       [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.85)],
       [0.0, 1.0]
     );
     paint.style = PaintingStyle.fill;
 
-    // Drawing the modern, pronounced concave curve from the screenshot
+    // Drawing the modern, pronounced concave curve
     Path path = Path();
-    path.lineTo(0, size.height * 0.7); // Adjust for curve sharpness
+    path.lineTo(0, size.height * 0.7); 
     
     // First Control Point and End Point for the wave
     var firstControlPoint = Offset(size.width / 4, size.height);
-    var firstEndPoint = Offset(size.width / 2, size.height * 0.85); // Highest part of concave
+    var firstEndPoint = Offset(size.width / 2, size.height * 0.85); 
     path.quadraticBezierTo(firstControlPoint.dx, firstControlPoint.dy, firstEndPoint.dx, firstEndPoint.dy);
     
     // Second Control Point and End Point for the wave
@@ -338,8 +337,8 @@ class ModernCurvePainter extends CustomPainter {
     var secondEndPoint = Offset(size.width, size.height * 0.9);
     path.quadraticBezierTo(secondControlPoint.dx, secondControlPoint.dy, secondEndPoint.dx, secondEndPoint.dy);
 
-    path.lineTo(size.width, 0); // Complete to top right
-    path.close(); // Close path back to (0,0)
+    path.lineTo(size.width, 0); 
+    path.close(); 
 
     canvas.drawPath(path, paint);
   }
@@ -350,7 +349,7 @@ class ModernCurvePainter extends CustomPainter {
   }
 }
 
-// --- Web View Screen for External Links (Unchanged visually for stability) ---
+// --- Web View Screen for External Links ---
 class AuthWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
