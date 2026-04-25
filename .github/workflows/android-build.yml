@@ -1,8 +1,16 @@
-name: Android CI
+name: Fast Android CI
 
 on:
   push:
     branches: [ "main", "master" ]
+  # NEW: Adds a manual button in GitHub to trigger Play Store builds
+  workflow_dispatch:
+    inputs:
+      build_release:
+        description: 'Build .AAB for Play Store?'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -17,15 +25,22 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        
+
+    # NEW: Aggressive Gradle Caching
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+
+    # UPGRADED: Flutter SDK Caching
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
+        cache: true
+        cache-key: 'flutter-:os:-:channel:-:version:-:arch:-:hash:'
         
     - name: Generate Platform Folders
       run: flutter create --platforms=android .
-        
+
     - name: Inject App Name and Permissions
       run: |
         sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
@@ -38,11 +53,6 @@ jobs:
       run: |
         flutter pub run flutter_launcher_icons
         flutter pub run flutter_native_splash:create
-      
-    - name: Build Split APKs and App Bundle
-      run: |
-        flutter build apk --release --split-per-abi
-        flutter build appbundle --release
         
     - name: Decode Keystore from Secrets
       env:
@@ -50,6 +60,9 @@ jobs:
       run: |
         echo "$ENCODED_KEYSTORE" | base64 --decode --ignore-garbage > kaida_upload_key.jks
       
+    - name: Build Fast APK (Always runs)
+      run: flutter build apk --release --split-per-abi
+        
     - name: Sign 64-bit APK (For Direct Download)
       env:
         STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
@@ -64,7 +77,13 @@ jobs:
         name: Kaida-Learn-Optimized-APK
         path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
         
+    # CONDITIONAL: Only runs if you manually check the box in GitHub
+    - name: Build App Bundle
+      if: ${{ github.event.inputs.build_release == 'true' }}
+      run: flutter build appbundle --release
+        
     - name: Strip Debug Signature and Sign Play Store Bundle
+      if: ${{ github.event.inputs.build_release == 'true' }}
       env:
         STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
         KEY_PASSWORD: ${{ secrets.KAIDA_KEY_PASSWORD }}
@@ -73,6 +92,7 @@ jobs:
         jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore kaida_upload_key.jks -storepass $STORE_PASSWORD -keypass $KEY_PASSWORD build/app/outputs/bundle/release/app-release.aab kaida_upload_alias
         
     - name: Upload Play Store Bundle
+      if: ${{ github.event.inputs.build_release == 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: Kaida-Learn-PlayStore-AAB
