@@ -26,31 +26,34 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
+    final scaffoldBgColor = isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor;
+    final barColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
     final activeColor = AppTheme.primaryColor;
     final inactiveColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
 
     return Scaffold(
-      // extendBody ensures the screens flow smoothly behind the transparent notch
-      extendBody: true, 
+      backgroundColor: scaffoldBgColor,
+      // FIXED: Disabling extendBody automatically pads your scrollable content globally 
+      // so it never hides behind the BottomAppBar.
+      extendBody: false, 
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
       ),
       
-      // 1. THE CENTER FLOATING BUTTON (Shop Products)
+      // 1. THE CENTER FLOATING BUTTON (Scaled down slightly)
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
-        height: 64,
-        width: 64,
+        height: 56, // Scaled down from 64
+        width: 56,
         child: FloatingActionButton(
           backgroundColor: Colors.transparent,
           elevation: _currentIndex == 2 ? 8 : 4,
           shape: const CircleBorder(),
           onPressed: () => setState(() => _currentIndex = 2),
           child: Container(
-            width: 64,
-            height: 64,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -65,53 +68,61 @@ class _MainLayoutState extends State<MainLayout> {
                 if (_currentIndex == 2)
                   BoxShadow(
                     color: AppTheme.primaryColor.withOpacity(0.4),
-                    blurRadius: 12,
+                    blurRadius: 10,
                     offset: const Offset(0, 4),
                   )
               ],
             ),
-            child: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 28),
+            child: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 24),
           ),
         ),
       ),
       
-      // 2. THE NOTCHED BOTTOM BAR
-      bottomNavigationBar: BottomAppBar(
-        color: bgColor,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8.0,
-        elevation: 20,
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          height: 65,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Left Group
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNavItem(icon: Icons.home_rounded, label: 'Home', index: 0, activeColor: activeColor, inactiveColor: inactiveColor),
-                    _buildNavItem(icon: Icons.school_rounded, label: 'Courses', index: 1, activeColor: activeColor, inactiveColor: inactiveColor),
-                  ],
+      // 2. THE NOTCHED BOTTOM BAR (Added shadow outline)
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              // FIXED: Adds a crisp outline shadow to distinguish the bar in dark/light mode
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomAppBar(
+          color: barColor,
+          surfaceTintColor: barColor,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 6.0,
+          elevation: 0, // Handled by container shadow above
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            height: 60, // Scaled down from 65
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavItem(icon: Icons.home_rounded, label: 'Home', index: 0, activeColor: activeColor, inactiveColor: inactiveColor),
+                      _buildNavItem(icon: Icons.school_rounded, label: 'Courses', index: 1, activeColor: activeColor, inactiveColor: inactiveColor),
+                    ],
+                  ),
                 ),
-              ),
-              
-              // Spacing for the Floating Button Notch
-              const SizedBox(width: 48), 
-              
-              // Right Group
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildNavItem(icon: Icons.play_circle_fill_rounded, label: 'Learning', index: 3, activeColor: activeColor, inactiveColor: inactiveColor),
-                    _buildNavItem(icon: Icons.person_rounded, label: 'Profile', index: 4, activeColor: activeColor, inactiveColor: inactiveColor),
-                  ],
+                const SizedBox(width: 48), // Notch space
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavItem(icon: Icons.play_circle_fill_rounded, label: 'Learning', index: 3, activeColor: activeColor, inactiveColor: inactiveColor),
+                      _buildNavItem(icon: Icons.person_rounded, label: 'Profile', index: 4, activeColor: activeColor, inactiveColor: inactiveColor),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -135,7 +146,7 @@ class _MainLayoutState extends State<MainLayout> {
             child: Icon(
               icon,
               color: isSelected ? activeColor : inactiveColor,
-              size: isSelected ? 26 : 24,
+              size: isSelected ? 24 : 22,
             ),
           ),
           const SizedBox(height: 4),

@@ -21,7 +21,7 @@ class CatalogItem {
   final String categoryName;
   final String productType;
   final DateTime? releaseDate;
-  final String language; // NEW: Language attribute
+  final String language;
 
   CatalogItem({
     required this.id, required this.slug, required this.title, required this.thumbnailUrl,
@@ -59,7 +59,7 @@ class CatalogItem {
       categoryName: json['category_name']?.toString() ?? 'General',
       productType: json['product_type']?.toString() ?? '',
       releaseDate: parsedDate,
-      language: json['language']?.toString() ?? 'Hausa', // Fallback ensures UI never crashes
+      language: json['language']?.toString() ?? 'Hausa',
     );
   }
 }
@@ -96,7 +96,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final userId = prefs.getInt('user_id');
     if (userId == null) return;
 
-    // 1. Instantly load from offline memory
     final cachedWishlist = prefs.getString('cached_wishlist_${widget.actionType}');
     if (cachedWishlist != null) {
       List<dynamic> list = json.decode(cachedWishlist);
@@ -107,7 +106,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
       }
     }
 
-    // 2. Sync with database in the background
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.getWishlist),
@@ -158,12 +156,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
             }
           }
 
-          // --- SMART SORTING ALGORITHM ---
-          // This forces active courses to the top, and 'Coming Soon' to the bottom
           parsedItems.sort((a, b) {
             if (a.isComingSoon && !b.isComingSoon) return 1;
             if (!a.isComingSoon && b.isComingSoon) return -1;
-            return 0; // Maintain natural API order otherwise
+            return 0;
           });
 
           if (mounted) {
@@ -330,7 +326,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.70, // Slightly taller to fit vertical badges
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                 ),
@@ -382,27 +378,28 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         )
                       : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
                   
-                  // NEW: Category & Language Badges
+                  // FIXED: VERTICAL BADGE STACK (Prevents horizontal overlap with Wishlist)
                   Positioned(
                     top: 8, left: 8,
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(6)),
                           child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         ),
                         if (widget.actionType == 'courses') ...[
-                          const SizedBox(width: 4),
+                          const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.9), borderRadius: BorderRadius.circular(8)),
+                            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.9), borderRadius: BorderRadius.circular(6)),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.language, size: 9, color: Colors.white),
-                                const SizedBox(width: 3),
-                                Text(item.language.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                const Icon(Icons.language, size: 10, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(item.language.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
