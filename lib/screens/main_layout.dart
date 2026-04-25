@@ -88,7 +88,6 @@ class _MainLayoutState extends State<MainLayout> {
                 height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  // UPGRADED: Solid Primary Color without Opacity/Gradients
                   color: AppTheme.primaryColor,
                   boxShadow: [
                     if (_currentIndex == 3)
@@ -98,7 +97,13 @@ class _MainLayoutState extends State<MainLayout> {
                   ],
                   border: Border.all(color: barColor, width: 3), 
                 ),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                    Text('AI', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, height: 1.1)),
+                  ],
+                ),
               ),
             ),
           ),

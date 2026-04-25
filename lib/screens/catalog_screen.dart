@@ -130,50 +130,63 @@ class _CatalogScreenState extends State<CatalogScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Wishlist API Error: $e");
+      debugPrint("Wishlist offline sync - using cache");
     }
   }
 
   Future<void> _fetchData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. INSTANT OFFLINE LOAD
+    final cachedData = prefs.getString('cached_catalog_${widget.actionType}');
+    if (cachedData != null) {
+      _processDataPayload(json.decode(cachedData));
+    }
+
+    // 2. BACKGROUND SYNC
     try {
       final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          List<dynamic> list = data['data'];
-          List<CatalogItem> parsedItems = [];
-          Set<String> uniqueCategories = {'All'};
-
-          for (var item in list) {
-            try {
-              final parsed = CatalogItem.fromJson(item, widget.actionType);
-              parsedItems.add(parsed);
-              if (parsed.categoryName.isNotEmpty && parsed.categoryName != 'General') {
-                uniqueCategories.add(parsed.categoryName);
-              }
-            } catch (e) {
-              debugPrint("Parse error: $e");
-            }
-          }
-
-          parsedItems.sort((a, b) {
-            if (a.isComingSoon && !b.isComingSoon) return 1;
-            if (!a.isComingSoon && b.isComingSoon) return -1;
-            return 0;
-          });
-
-          if (mounted) {
-            setState(() {
-              _allItems = parsedItems;
-              _filteredItems = parsedItems;
-              _categories = uniqueCategories.toList();
-              _isLoading = false;
-            });
-          }
+          prefs.setString('cached_catalog_${widget.actionType}', json.encode(data['data']));
+          _processDataPayload(data['data']);
         }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _processDataPayload(List<dynamic> list) {
+    List<CatalogItem> parsedItems = [];
+    Set<String> uniqueCategories = {'All'};
+
+    for (var item in list) {
+      try {
+        final parsed = CatalogItem.fromJson(item, widget.actionType);
+        parsedItems.add(parsed);
+        if (parsed.categoryName.isNotEmpty && parsed.categoryName != 'General') {
+          uniqueCategories.add(parsed.categoryName);
+        }
+      } catch (e) {
+        debugPrint("Parse error: $e");
+      }
+    }
+
+    parsedItems.sort((a, b) {
+      if (a.isComingSoon && !b.isComingSoon) return 1;
+      if (!a.isComingSoon && b.isComingSoon) return -1;
+      return 0;
+    });
+
+    if (mounted) {
+      setState(() {
+        _allItems = parsedItems;
+        _filteredItems = parsedItems;
+        _categories = uniqueCategories.toList();
+        _isLoading = false;
+      });
     }
   }
 
@@ -305,7 +318,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             ),
-          if (_isLoading)
+          if (_isLoading && _allItems.isEmpty)
             const SliverFillRemaining(child: Center(child: KaidaLoader()))
           else if (_filteredItems.isEmpty)
             SliverFillRemaining(
@@ -390,7 +403,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         ),
                         if (widget.actionType == 'courses') ...[
                           const SizedBox(height: 6),
-                          // CHANGED: Solid red language background
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                             decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),

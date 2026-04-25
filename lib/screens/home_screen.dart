@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
@@ -27,7 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _userName = "Learner"; 
 
-  // SERVER-DRIVEN UI VARIABLES
   bool _showPromoBanner = false;
   String _promoImageUrl = "";
   String _promoLinkUrl = "";
@@ -41,11 +41,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchPromoData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 1. INSTANT OFFLINE LOAD
+    final cached = prefs.getString('cached_promo_data');
+    if (cached != null) {
+      final data = json.decode(cached);
+      if (mounted) {
+        setState(() {
+          _showPromoBanner = data['promo_enabled'] == '1';
+          _promoImageUrl = data['promo_image'] ?? '';
+          _promoLinkUrl = data['promo_link'] ?? '';
+        });
+      }
+    }
+
+    // 2. BACKGROUND SYNC
     try {
       final response = await http.get(Uri.parse(ApiConfig.appSettings));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && mounted) {
+          prefs.setString('cached_promo_data', json.encode(data['data']));
           setState(() {
             _showPromoBanner = data['data']['promo_enabled'] == '1';
             _promoImageUrl = data['data']['promo_image'] ?? '';
@@ -54,18 +71,30 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Promo error: $e");
+      debugPrint("Promo offline - using cache");
     }
   }
 
   Future<void> _fetchDashboardData() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getInt('user_id');
-      final savedName = prefs.getString('username') ?? prefs.getString('full_name') ?? "Learner";
-      if (mounted) setState(() => _userName = savedName);
-      if (userId == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    final savedName = prefs.getString('username') ?? prefs.getString('full_name') ?? "Learner";
+    if (mounted) setState(() => _userName = savedName);
+    if (userId == null) return;
 
+    // 1. INSTANT OFFLINE LOAD
+    final cachedDash = prefs.getString('cached_home_dashboard_$userId');
+    if (cachedDash != null) {
+      if (mounted) {
+        setState(() {
+          _dashboardData = json.decode(cachedDash);
+          _isLoadingDashboard = false;
+        });
+      }
+    }
+
+    // 2. BACKGROUND SYNC
+    try {
       final response = await http.post(
         Uri.parse(ApiConfig.dashboardData),
         body: {'user_id': userId.toString()},
@@ -74,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && mounted) {
+          prefs.setString('cached_home_dashboard_$userId', json.encode(data['data']));
           setState(() {
             _dashboardData = data['data'];
             _isLoadingDashboard = false;
@@ -86,6 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchCatalogData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. INSTANT OFFLINE LOAD
+    final cachedCat = prefs.getString('cached_home_catalog');
+    if (cachedCat != null) {
+      _processCatalogPayload(json.decode(cachedCat));
+    }
+
+    // 2. BACKGROUND SYNC
     try {
       final response = await http.get(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'),
@@ -94,44 +133,47 @@ class _HomeScreenState extends State<HomeScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          List<dynamic> list = data['data'];
-          
-          List<CatalogItem> active = [];
-          List<CatalogItem> coming = [];
-          DateTime now = DateTime.now();
-
-          for (var item in list) {
-            try {
-              bool isComingSoon = false;
-              if (item['release_date'] != null) {
-                DateTime? release = DateTime.tryParse(item['release_date'].toString());
-                if (release != null && release.isAfter(now)) {
-                  isComingSoon = true;
-                }
-              }
-              
-              CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
-              
-              if (isComingSoon) {
-                coming.add(parsed);
-              } else {
-                active.add(parsed);
-              }
-            } catch (e) {
-              debugPrint("Parse error: $e");
-            }
-          }
-          if (mounted) {
-            setState(() {
-              _activeCourses = active;
-              _comingSoonCourses = coming;
-              _isLoadingCatalog = false;
-            });
-          }
+          prefs.setString('cached_home_catalog', json.encode(data['data']));
+          _processCatalogPayload(data['data']);
         }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingCatalog = false);
+    }
+  }
+
+  void _processCatalogPayload(List<dynamic> list) {
+    List<CatalogItem> active = [];
+    List<CatalogItem> coming = [];
+    DateTime now = DateTime.now();
+
+    for (var item in list) {
+      try {
+        bool isComingSoon = false;
+        if (item['release_date'] != null) {
+          DateTime? release = DateTime.tryParse(item['release_date'].toString());
+          if (release != null && release.isAfter(now)) {
+            isComingSoon = true;
+          }
+        }
+        
+        CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
+        
+        if (isComingSoon) {
+          coming.add(parsed);
+        } else {
+          active.add(parsed);
+        }
+      } catch (e) {
+        debugPrint("Parse error: $e");
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _activeCourses = active;
+        _comingSoonCourses = coming;
+        _isLoadingCatalog = false;
+      });
     }
   }
 
@@ -199,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 30),
               ],
 
-              if (_isLoadingCatalog)
+              if (_isLoadingCatalog && _activeCourses.isEmpty)
                  const Center(child: Padding(padding: EdgeInsets.all(40), child: KaidaLoader()))
               else ...[
                 _buildHorizontalSection('Featured Courses', _getSubList(_activeCourses, 0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
@@ -234,10 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
         height: 140, 
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          image: DecorationImage(
-            image: NetworkImage(_promoImageUrl),
-            fit: BoxFit.cover,
-          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.15), 
@@ -245,6 +283,12 @@ class _HomeScreenState extends State<HomeScreen> {
               offset: const Offset(0, 4)
             )
           ]
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: CachedNetworkImage(
+          imageUrl: _promoImageUrl,
+          fit: BoxFit.cover,
+          errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor),
         ),
       ),
     );
@@ -380,7 +424,13 @@ class _HomeScreenState extends State<HomeScreen> {
             Stack(
               children: [
                 item.thumbnailUrl.isNotEmpty
-                    ? Image.network(item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
+                    ? CachedNetworkImage(
+                        imageUrl: item.thumbnailUrl, 
+                        height: 110, 
+                        width: double.infinity, 
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) => Container(height: 110, color: AppTheme.primaryColor, child: const Icon(Icons.school, size: 40, color: Colors.white)),
+                      )
                     : Container(height: 110, color: AppTheme.primaryColor, child: const Icon(Icons.school, size: 40, color: Colors.white)),
                 if (badgeText != null)
                   Positioned(
@@ -391,7 +441,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text(badgeText, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                // NEW: Solid Red Language Badge on Homepage
                 Positioned(
                   top: 8, right: 8,
                   child: Container(
@@ -488,7 +537,13 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           children: [
             rawThumb.isNotEmpty
-                ? Image.network(rawThumb, height: 100, width: 100, fit: BoxFit.cover)
+                ? CachedNetworkImage(
+                    imageUrl: rawThumb, 
+                    height: 100, 
+                    width: 100, 
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => Container(height: 100, width: 100, color: AppTheme.primaryColor, child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40)),
+                  )
                 : Container(height: 100, width: 100, color: AppTheme.primaryColor, child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 40)),
             Expanded(
               child: Padding(
