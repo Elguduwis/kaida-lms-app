@@ -56,9 +56,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final pData = json.decode(profileRes.body);
         if (pData['status'] == 'success' && mounted) {
           setState(() {
-            _name = pData['data']['name'];
-            _email = pData['data']['email'];
-            _role = pData['data']['role'];
+            _name = pData['data']['name'] ?? 'Learner';
+            _email = pData['data']['email'] ?? '';
+            // Safe parsing to ensure no null breaks the UI
+            _role = pData['data']['role']?.toString().trim() ?? 'student';
             _avatarUrl = pData['data']['avatar_url'];
           });
         }
@@ -231,6 +232,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (Route<dynamic> route) => false);
   }
 
+  // --- UPGRADED: BULLETPROOF FUZZY MATCHING BADGE GENERATOR ---
+  Widget _buildRoleBadge(String role) {
+    String safeRole = role.toLowerCase().trim();
+    
+    String title = 'Standard Member';
+    Color badgeColor = const Color(0xFFD4AF37); // Default Gold
+    IconData icon = Icons.verified_rounded;
+
+    if (safeRole.contains('admin')) {
+      title = 'Administrator';
+      badgeColor = Colors.redAccent;
+      icon = Icons.admin_panel_settings_rounded;
+    } else if (safeRole.contains('instructor') || safeRole.contains('teacher')) {
+      title = 'Instructor';
+      badgeColor = Colors.blueAccent;
+      icon = Icons.school_rounded;
+    } else if (safeRole.contains('affiliate') || safeRole.contains('partner')) {
+      title = 'Affiliate Partner';
+      badgeColor = Colors.purpleAccent;
+      icon = Icons.campaign_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.15), 
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor.withOpacity(0.3))
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: badgeColor, size: 14),
+          const SizedBox(width: 6),
+          Text(title, style: TextStyle(color: badgeColor, fontWeight: FontWeight.w700, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -248,7 +289,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  // 1. TOP HEADER (Profile & Logout)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     child: Row(
@@ -264,7 +304,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
 
-                  // 2. CENTRAL AVATAR & INFO
                   Center(
                     child: Column(
                       children: [
@@ -304,30 +343,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Text(_name, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 6),
                         
-                        // GOLD BADGE
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD4AF37).withOpacity(0.15), 
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3))
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.verified_rounded, color: Color(0xFFD4AF37), size: 14),
-                              SizedBox(width: 6),
-                              Text('Standard Member', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w700, fontSize: 12)),
-                            ],
-                          ),
-                        ),
+                        // DEPLOYS THE NEW BULLETPROOF BADGE
+                        _buildRoleBadge(_role),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 32),
 
-                  // 3. SETTINGS GROUP
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
@@ -336,7 +359,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Text('Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
                         const SizedBox(height: 12),
                         
-                        // The White Settings Card Container
                         Container(
                           decoration: BoxDecoration(
                             color: surfaceColor,
@@ -348,20 +370,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _buildSettingsRow(Icons.account_balance_wallet_outlined, 'KAIDA Wallet', '$_walletBalance KAIDA', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet top-up coming soon!'), behavior: SnackBarBehavior.floating)), iconColor: iconColor, textColor: textColor),
                               _buildDivider(isDark),
                               _buildSettingsRow(Icons.favorite_border_rounded, 'My Wishlist', '', onTap: () => _openWebDashboard('My Wishlist', '/wishlist.php'), iconColor: iconColor, textColor: textColor),
-                              if (_role == 'instructor' || _role == 'admin') ...[
+                              
+                              // Check visibility using the same safe logic
+                              if (_role.trim().toLowerCase().contains('instructor') || _role.trim().toLowerCase().contains('admin')) ...[
                                 _buildDivider(isDark),
                                 _buildSettingsRow(Icons.dashboard_outlined, 'Instructor Panel', '', onTap: () => _openWebDashboard('Instructor Panel', '/instructor/dashboard.php'), iconColor: iconColor, textColor: textColor),
                               ],
-                              if (_role == 'affiliate' || _role == 'admin') ...[
+                              if (_role.trim().toLowerCase().contains('affiliate') || _role.trim().toLowerCase().contains('admin')) ...[
                                 _buildDivider(isDark),
                                 _buildSettingsRow(Icons.campaign_outlined, 'Affiliate Panel', '', onTap: () => _openWebDashboard('Affiliate Panel', '/affiliate/dashboard.php'), iconColor: iconColor, textColor: textColor),
                               ],
+                              
                               _buildDivider(isDark),
                               _buildSettingsRow(Icons.lock_outline_rounded, 'Change Password', '', onTap: _showChangePasswordModal, iconColor: iconColor, textColor: textColor),
                               _buildDivider(isDark),
                               _buildSettingsRow(Icons.share_outlined, 'Share Application', '', onTap: _shareApp, iconColor: iconColor, textColor: textColor),
                               _buildDivider(isDark),
-                              // Dark Mode Toggle directly inside the grouped list
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 child: Row(
@@ -384,7 +408,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         
                         const SizedBox(height: 40),
 
-                        // 4. SOCIAL FOOTER
                         Center(
                           child: Column(
                             children: [
@@ -440,7 +463,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// --- MISSING CLASS RESTORED ---
 class WebDashboardScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -452,6 +474,7 @@ class WebDashboardScreen extends StatefulWidget {
 class _WebDashboardScreenState extends State<WebDashboardScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _hasError = false; 
 
   @override
   void initState() {
@@ -461,8 +484,11 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
       ..setBackgroundColor(AppTheme.backgroundColor)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
+          onPageStarted: (String url) { if (mounted) setState(() { _isLoading = true; _hasError = false; }); },
           onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
+          onWebResourceError: (WebResourceError error) {
+            if (mounted) setState(() { _isLoading = false; _hasError = true; });
+          },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
@@ -478,8 +504,33 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading) const Center(child: KaidaLoader()),
+          if (_hasError)
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Please check your internet connection.', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                    onPressed: () {
+                      setState(() { _hasError = false; _isLoading = true; });
+                      _controller.reload();
+                    },
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    label: const Text('Try Again', style: TextStyle(color: Colors.white)),
+                  )
+                ],
+              ),
+            )
+          else
+            WebViewWidget(controller: _controller),
+            
+          if (_isLoading && !_hasError) const Center(child: KaidaLoader()),
         ],
       ),
     );
