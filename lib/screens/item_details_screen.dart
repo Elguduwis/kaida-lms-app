@@ -36,9 +36,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   Future<void> _initializeUserAndData() async {
     final prefs = await SharedPreferences.getInstance();
     _userId = prefs.getInt('user_id');
-    
+
     await _checkEnrollmentStatus(prefs);
-    
+
     if (widget.item.type == 'courses') {
       await _fetchExtraDetails();
     } else {
@@ -80,7 +80,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     String introUrl = _extraDetails?['course']?['intro_video_url']?.toString() ?? '';
     if (introUrl.isNotEmpty) {
       if (!introUrl.startsWith('http')) introUrl = 'https://academy.kainuwa.africa/' + introUrl;
-      
+
       _videoController = VideoPlayerController.network(introUrl)
         ..initialize().then((_) {
           if (mounted) {
@@ -120,10 +120,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)
       ));
     } else {
-      String targetPath = widget.item.type == 'courses' 
-          ? '/view_course.php?slug=${widget.item.slug}' 
+      // UPGRADED ROUTING: Courses go directly to enroll.php, Products go to view_product.php
+      String targetPath = widget.item.type == 'courses'
+          ? '/enroll.php?course_id=${widget.item.id}'
           : '/view_product.php?slug=${widget.item.slug}';
-      
+
       String encodedRedirect = Uri.encodeComponent(targetPath);
       String authBridgeUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$encodedRedirect';
 
@@ -139,7 +140,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     if (_extraDetails != null && _extraDetails!['instructor'] != null) {
       avatarUrl = _extraDetails!['instructor']['avatar_url']?.toString();
     }
-    
+
     if (avatarUrl != null && avatarUrl.isNotEmpty && !avatarUrl.startsWith('http')) {
       if (!avatarUrl.startsWith('/')) avatarUrl = '/' + avatarUrl;
       avatarUrl = 'https://academy.kainuwa.africa' + avatarUrl;
@@ -149,7 +150,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic Theme Detectors
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
@@ -158,11 +158,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     String? instructorAvatar = _getInstructorAvatar();
 
     return Scaffold(
-      body: _isLoading 
+      body: _isLoading
         ? Center(child: KaidaLoader())
         : CustomScrollView(
             slivers: [
-              // 1. Collapsing Hero Header (with Intro Video)
               SliverAppBar(
                 expandedHeight: 250.0,
                 pinned: true,
@@ -173,14 +172,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 ),
               ),
 
-              // 2. Content Body
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
@@ -188,27 +185,25 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          widget.item.categoryName, 
+                          widget.item.categoryName,
                           style: const TextStyle(color: AppTheme.primaryColor, fontSize: 12, fontWeight: FontWeight.bold)
                         ),
                       ),
                       const SizedBox(height: 12),
-                      
-                      // Title
+
                       Text(widget.item.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 12),
-                      
-                      // Restored Instructor Profile & Avatar
+
                       Row(
                         children: [
                           CircleAvatar(
-                            radius: 16, 
-                            backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300, 
-                            backgroundImage: (instructorAvatar != null && instructorAvatar.isNotEmpty) 
-                                ? CachedNetworkImageProvider(instructorAvatar) 
+                            radius: 16,
+                            backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                            backgroundImage: (instructorAvatar != null && instructorAvatar.isNotEmpty)
+                                ? CachedNetworkImageProvider(instructorAvatar)
                                 : null,
-                            child: (instructorAvatar == null || instructorAvatar.isEmpty) 
-                                ? const Icon(Icons.person, size: 16, color: Colors.white) 
+                            child: (instructorAvatar == null || instructorAvatar.isEmpty)
+                                ? const Icon(Icons.person, size: 16, color: Colors.white)
                                 : null,
                           ),
                           const SizedBox(width: 8),
@@ -217,43 +212,36 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           Text('By ${widget.item.instructorName}', style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: FontWeight.w600)),
                         ],
                       ),
-                      
+
                       const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider()),
-                      
-                      // Restored Kaida Points Display
+
                       if (widget.item.type == 'courses') ...[
                         _buildKaidaPointsDisplay(),
                         const SizedBox(height: 20),
                       ],
 
-                      // Description Section
                       Text('About this ${widget.item.type == 'courses' ? 'Course' : 'Product'}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 12),
-                      
-                      // Full Description safely handled
+
                       Text(
                         _extraDetails?['course']?['description']?.toString().replaceAll(RegExp(r'<[^>]*>'), '') ?? 'No description provided for this item yet. Check back soon for more details!',
                         style: TextStyle(color: subTextColor, fontSize: 14, height: 1.5),
                       ),
-                      
+
                       const SizedBox(height: 30),
 
-                      // Restored Curriculum Section
                       if (widget.item.type == 'courses') ...[
                         Text('Curriculum', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 12),
                         _buildCurriculumList(isDark, textColor, subTextColor),
                       ],
-
-                      const SizedBox(height: 100), // padding so content isn't hidden by bottom bar
+                      const SizedBox(height: 100),
                     ],
                   ),
                 ),
               ),
             ],
           ),
-      
-      // 3. Persistent Bottom Action Bar (New UI Feature)
       bottomNavigationBar: _isLoading ? const SizedBox.shrink() : Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
@@ -266,7 +254,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Price Display pinned to bottom
               Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,8 +270,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                   ]
                 ],
               ),
-              
-              // Enroll / Webview Route Button
+
               SizedBox(
                 width: 160,
                 height: 50,
@@ -295,7 +281,8 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                   ),
                   onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction,
                   child: Text(
-                    _isEnrolled && widget.item.type == 'courses' ? 'START' : (widget.item.isFree ? 'ENROLL' : 'BUY NOW'), 
+                    // FIXED: Now displays ENROLL explicitly for all courses
+                    _isEnrolled && widget.item.type == 'courses' ? 'START' : (widget.item.type == 'courses' ? 'ENROLL' : 'BUY NOW'),
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
                   ),
                 ),
@@ -316,13 +303,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
       children: [
         widget.item.thumbnailUrl.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: widget.item.thumbnailUrl, 
+                imageUrl: widget.item.thumbnailUrl,
                 fit: BoxFit.cover,
                 errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: const Icon(Icons.image, color: Colors.white)),
               )
             : Container(color: AppTheme.primaryColor, child: const Icon(Icons.school, size: 60, color: Colors.white)),
-        
-        // Dark gradient overlay to make the back button visible
+
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -332,7 +318,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
             ),
           ),
         ),
-        
+
         if (widget.item.type == 'courses')
            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 60)),
       ],
@@ -400,8 +386,8 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
               return ListTile(
                 contentPadding: const EdgeInsets.only(left: 16, right: 0),
                 leading: Icon(
-                  type == 'quiz' ? Icons.help_outline : (type == 'assignment' ? Icons.assignment : Icons.play_circle_outline), 
-                  size: 20, 
+                  type == 'quiz' ? Icons.help_outline : (type == 'assignment' ? Icons.assignment : Icons.play_circle_outline),
+                  size: 20,
                   color: isDark ? AppTheme.primaryColor.withOpacity(0.7) : Colors.grey.shade500
                 ),
                 title: Text(lesson['title'] ?? 'Lesson', style: TextStyle(fontSize: 14, color: isDark ? Colors.grey.shade300 : Colors.grey.shade800)),
@@ -414,7 +400,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 }
 
-// Dedicated WebView specifically for checkouts and details routing
+// -----------------------------------------------------------------------------
+// SECURE OFFLINE-PROTECTED CHECKOUT WEBVIEW
+// -----------------------------------------------------------------------------
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -427,6 +415,7 @@ class CheckoutWebViewScreen extends StatefulWidget {
 class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _hasError = false; // GLOBALLY TRACKS CONNECTION ERRORS
 
   @override
   void initState() {
@@ -436,8 +425,16 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
       ..setBackgroundColor(AppTheme.backgroundColor)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
-          onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
+          onPageStarted: (String url) { 
+            if (mounted) setState(() { _isLoading = true; _hasError = false; }); 
+          },
+          onPageFinished: (String url) { 
+            if (mounted) setState(() => _isLoading = false); 
+          },
+          // INTERCEPTS THE NETWORK ERROR BEFORE IT SHOWS IN THE BROWSER
+          onWebResourceError: (WebResourceError error) {
+            if (mounted) setState(() { _isLoading = false; _hasError = true; });
+          },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
@@ -460,13 +457,45 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            IconButton(icon: const Icon(Icons.refresh), onPressed: () => _controller.reload()),
+            IconButton(
+              icon: const Icon(Icons.refresh), 
+              onPressed: () {
+                setState(() { _hasError = false; _isLoading = true; });
+                _controller.reload();
+              }
+            ),
           ],
         ),
         body: Stack(
           children: [
-            WebViewWidget(controller: _controller),
-            if (_isLoading) Center(child: KaidaLoader()),
+            if (_hasError)
+              // BEAUTIFUL NATIVE ERROR SCREEN
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('Please check your internet connection.', style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                      onPressed: () {
+                        setState(() { _hasError = false; _isLoading = true; });
+                        _controller.reload();
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      label: const Text('Try Again', style: TextStyle(color: Colors.white)),
+                    )
+                  ],
+                ),
+              )
+            else
+              WebViewWidget(controller: _controller),
+              
+            if (_isLoading && !_hasError) Center(child: KaidaLoader()),
           ],
         ),
       ),
