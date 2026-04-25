@@ -240,9 +240,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final iconColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.darkBackgroundColor : const Color(0xFFF8F9FE), // Soft iOS grey background
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : const Color(0xFFF8F9FE),
       body: _isLoading 
-        ? Center(child: KaidaLoader())
+        ? const Center(child: KaidaLoader())
         : SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -264,7 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
 
-                  // 2. CENTRAL AVATAR & INFO (Match iOS Reference)
+                  // 2. CENTRAL AVATAR & INFO
                   Center(
                     child: Column(
                       children: [
@@ -437,5 +437,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildDivider(bool isDark) {
     return Divider(height: 1, thickness: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade100, indent: 54);
+  }
+}
+
+// --- MISSING CLASS RESTORED ---
+class WebDashboardScreen extends StatefulWidget {
+  final String title;
+  final String url;
+  const WebDashboardScreen({Key? key, required this.title, required this.url}) : super(key: key);
+  @override
+  _WebDashboardScreenState createState() => _WebDashboardScreenState();
+}
+
+class _WebDashboardScreenState extends State<WebDashboardScreen> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(AppTheme.backgroundColor)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
+          onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading) const Center(child: KaidaLoader()),
+        ],
+      ),
+    );
   }
 }
