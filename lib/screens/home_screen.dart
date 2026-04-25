@@ -22,7 +22,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingCatalog = true;
   Map<String, dynamic>? _dashboardData;
   
-  // Separated lists for live vs coming soon
   List<CatalogItem> _activeCourses = [];
   List<CatalogItem> _comingSoonCourses = [];
   
@@ -38,10 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _fetchDashboardData();
     _fetchCatalogData();
-    _fetchPromoData(); // Fetch the dynamic UI rules
+    _fetchPromoData();
   }
 
-  // --- NEW: Listens to the Admin Panel ---
   Future<void> _fetchPromoData() async {
     try {
       final response = await http.get(Uri.parse(ApiConfig.appSettings));
@@ -151,9 +149,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final headerColor = isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor;
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: AppTheme.primaryColor,
+        backgroundColor: headerColor,
         title: const Text('Kaida Learn', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -166,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: () async {
           await _fetchDashboardData();
           await _fetchCatalogData();
-          await _fetchPromoData(); // Refresh banner state
+          await _fetchPromoData(); 
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -174,22 +175,17 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Sleek Header
-              _buildHeaderSection(),
+              _buildHeaderSection(headerColor),
               
-              // --- NEW: DYNAMIC PROMO BANNER ---
               if (_showPromoBanner && _promoImageUrl.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 _buildPromoBanner(),
               ],
               
               const SizedBox(height: 24),
-
-              // 2. Categories
               _buildCategories(),
               const SizedBox(height: 24),
 
-              // 3. Jump Back In
               if (_dashboardData?['recent_course'] != null) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.0),
@@ -203,19 +199,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 30),
               ],
 
-              // 4. Dynamic Carousels
               if (_isLoadingCatalog)
                  const Center(child: Padding(padding: EdgeInsets.all(40), child: KaidaLoader()))
               else ...[
                 _buildHorizontalSection('Featured Courses', _getSubList(_activeCourses, 0, 4), badgeText: 'FEATURED', badgeColor: Colors.orange),
                 const SizedBox(height: 30),
-
                 _buildHorizontalSection('Top Rated Courses', _getSubList(_activeCourses, 2, 5)),
                 const SizedBox(height: 30),
-
                 _buildHorizontalSection('Popular Now', _getSubList(_activeCourses, 1, 4), badgeText: 'HOT', badgeColor: Colors.redAccent),
                 const SizedBox(height: 30),
-
                 if (_comingSoonCourses.isNotEmpty)
                   _buildHorizontalSection('Coming Soon', _comingSoonCourses, isComingSoon: true),
               ],
@@ -226,7 +218,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- NEW: Promo Banner Widget ---
   Widget _buildPromoBanner() {
     return GestureDetector(
       onTap: () async {
@@ -240,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         width: double.infinity,
-        height: 140, // Nice landscape size
+        height: 140, 
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           image: DecorationImage(
@@ -259,13 +250,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHeaderSection() {
+  Widget _buildHeaderSection(Color headerColor) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-      decoration: const BoxDecoration(
-        color: AppTheme.primaryColor,
-        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+      decoration: BoxDecoration(
+        color: headerColor,
+        borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,6 +391,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text(badgeText, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
+                // NEW: Solid Red Language Badge on Homepage
+                Positioned(
+                  top: 8, right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.language, size: 10, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(item.language.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
                 if (isComingSoon)
                   Container(
                     height: 110, width: double.infinity,

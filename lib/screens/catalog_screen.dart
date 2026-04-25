@@ -326,7 +326,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.70, // Slightly taller to fit vertical badges
+                  childAspectRatio: 0.70, 
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                 ),
@@ -378,7 +378,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         )
                       : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
                   
-                  // FIXED: VERTICAL BADGE STACK (Prevents horizontal overlap with Wishlist)
                   Positioned(
                     top: 8, left: 8,
                     child: Column(
@@ -391,9 +390,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         ),
                         if (widget.actionType == 'courses') ...[
                           const SizedBox(height: 6),
+                          // CHANGED: Solid red language background
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.9), borderRadius: BorderRadius.circular(6)),
+                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
