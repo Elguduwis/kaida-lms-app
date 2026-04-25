@@ -13,7 +13,6 @@ import '../config/app_theme.dart';
 import '../config/theme_provider.dart';
 import '../widgets/kaida_loader.dart';
 import 'login_screen.dart';
-import 'downloads_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -33,7 +32,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _avatarUrl;
   String _walletBalance = "0.00";
 
-  // NEW: Dynamic Settings Variables
   String _facebookUrl = "";
   String _twitterUrl = "";
   String _instagramUrl = "";
@@ -74,7 +72,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
 
-      // NEW: Fetch App Settings & Socials
       final settingsRes = await http.get(Uri.parse(ApiConfig.appSettings));
       if (settingsRes.statusCode == 200) {
         final setData = json.decode(settingsRes.body);
@@ -95,7 +92,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // NEW: Share & Social Launch Methods
   void _shareApp() {
     Share.share('$_shareMessage\n\n$_shareUrl');
   }
@@ -108,7 +104,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // FIX: Instant Avatar UI Update
   Future<void> _uploadAvatar() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
@@ -125,25 +120,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           var responseData = await response.stream.bytesToString();
           var jsonResponse = json.decode(responseData);
           if (jsonResponse['status'] == 'success') {
-            // Append timestamp to bust the image cache and force instant UI refresh
             String newUrl = jsonResponse['url'] ?? jsonResponse['avatar_url'];
             newUrl += '?t=${DateTime.now().millisecondsSinceEpoch}';
-            
             setState(() => _avatarUrl = newUrl);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated on Kaida Learn!'), backgroundColor: Colors.green));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated!'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
           } else {
             throw Exception(jsonResponse['message']);
           }
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update picture.'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update picture.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
       } finally {
         setState(() => _isUploadingAvatar = false);
       }
     }
   }
 
-  // RESTORED: Beautiful Bottom Sheet Modal
   void _showChangePasswordModal() {
     final currentPasswordCtrl = TextEditingController();
     final newPasswordCtrl = TextEditingController();
@@ -153,22 +145,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         return StatefulBuilder(builder: (context, setModalState) {
           return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Change Password', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const Text('Change Password', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 24),
                 TextField(
                   controller: currentPasswordCtrl,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Current Password', 
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                     prefixIcon: const Icon(Icons.lock_outline),
                   ),
                 ),
@@ -178,18 +171,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'New Password', 
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                     prefixIcon: const Icon(Icons.lock_reset),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 56,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor, 
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
                     ),
                     onPressed: isSubmitting ? null : () async {
                       if (currentPasswordCtrl.text.isEmpty || newPasswordCtrl.text.isEmpty) return;
@@ -203,7 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         final data = json.decode(res.body);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(data['message']), backgroundColor: data['status'] == 'success' ? Colors.green : Colors.red)
+                          SnackBar(content: Text(data['message']), backgroundColor: data['status'] == 'success' ? Colors.green : Colors.red, behavior: SnackBarBehavior.floating)
                         );
                       } catch (e) {
                         setModalState(() => isSubmitting = false);
@@ -211,10 +205,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                     child: isSubmitting 
                       ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Update Password', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      : const Text('Save Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
               ],
             ),
           );
@@ -229,254 +223,219 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (context) => WebDashboardScreen(title: title, url: url)));
   }
 
-  // FIX: Clear Web Cookies to force log out of WebView sessions
   void _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    
-    try {
-      await WebViewCookieManager().clearCookies();
-    } catch (e) {
-      debugPrint("Failed to clear cookies: $e");
-    }
-
+    try { await WebViewCookieManager().clearCookies(); } catch (e) {}
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (Route<dynamic> route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic Theme Detectors
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeProvider = Provider.of<ThemeProvider>(context);
     final surfaceColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.black54;
+    final iconColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
 
     return Scaffold(
-      // Let Scaffold use Theme background
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : const Color(0xFFF8F9FE), // Soft iOS grey background
       body: _isLoading 
-        ? Center(child: KaidaLoader()) // INJECTED KAIDA LOADER HERE
-        : SingleChildScrollView(
-            child: Column(
-              children: [
-                // HEADER & AVATAR
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.only(top: 60, bottom: 40),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primaryColor,
-                    borderRadius: BorderRadius.only(bottomLeft: Radius.circular(40), bottomRight: Radius.circular(40)),
-                  ),
-                  child: Column(
-                    children: [
-                      Stack(
-                        alignment: Alignment.bottomRight,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
-                            child: CircleAvatar(
-                              radius: 50,
-                              backgroundColor: Colors.white24,
-                              backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty) ? NetworkImage(_avatarUrl!) : null,
-                              child: (_avatarUrl == null || _avatarUrl!.isEmpty) ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: _uploadAvatar,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                              child: _isUploadingAvatar 
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
-                                : const Icon(Icons.camera_alt, color: AppTheme.primaryColor, size: 16),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(_name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                      const SizedBox(height: 4),
-                      Text(_email, style: const TextStyle(fontSize: 14, color: Colors.white70)),
-                    ],
-                  ),
-                ),
-
-                // KAIDA WALLET CARD
-                Transform.translate(
-                  offset: const Offset(0, -30),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 5))],
-                    ),
+        ? Center(child: KaidaLoader())
+        : SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  // 1. TOP HEADER (Profile & Logout)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.account_balance_wallet, color: AppTheme.primaryColor, size: 20),
-                                const SizedBox(width: 8),
-                                Text('KAIDA Wallet', style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text('$_walletBalance KAIDA', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet top-up is coming soon!')));
-                          },
-                          child: const Text('Top Up', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text('Profile', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: textColor, letterSpacing: -0.5)),
+                        TextButton(
+                          onPressed: _logout,
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          child: const Text('Logout', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16)),
                         )
                       ],
                     ),
                   ),
-                ),
 
-                // MENU LIST
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      // 1. Dark Mode (First item)
-                      _buildSwitchTile(Icons.dark_mode, 'Dark Mode', themeProvider.isDarkMode, (val) {
-                        themeProvider.toggleTheme(val);
-                      }, isDark, surfaceColor, textColor),
-
-                      // 2. Wishlist
-                      _buildMenuTile(Icons.favorite, 'My Wishlist', () {
-                        _openWebDashboard('My Wishlist', '/wishlist.php');
-                      }, isDark, surfaceColor, textColor),
-
-                      // 3. Digital Downloads
-                      _buildMenuTile(Icons.cloud_download, 'Digital Downloads', () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const DownloadsScreen()));
-                      }, isDark, surfaceColor, textColor),
-                      
-                      if (_role == 'instructor' || _role == 'admin')
-                        _buildMenuTile(Icons.dashboard, 'Instructor Dashboard', () {
-                          _openWebDashboard('Instructor Panel', '/instructor/dashboard.php');
-                        }, isDark, surfaceColor, textColor),
-
-                      if (_role == 'affiliate' || _role == 'admin') 
-                        _buildMenuTile(Icons.share, 'Affiliate Dashboard', () {
-                          _openWebDashboard('Affiliate Panel', '/affiliate/dashboard.php');
-                        }, isDark, surfaceColor, textColor),
-
-                      _buildMenuTile(Icons.lock, 'Change Password', _showChangePasswordModal, isDark, surfaceColor, textColor),
-
-                      // NEW: Share App Button injected here!
-                      _buildMenuTile(Icons.share, 'Share App', _shareApp, isDark, surfaceColor, textColor),
-
-                      _buildMenuTile(Icons.logout, 'Log Out', _logout, isDark, surfaceColor, textColor, isDestructive: true),
-                      
-                      const SizedBox(height: 30),
-
-                      // NEW: Social Media Footer injected here!
-                      const Text("Connect with us", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_facebookUrl.isNotEmpty)
-                            IconButton(icon: const FaIcon(FontAwesomeIcons.facebook, color: Colors.blue, size: 30), onPressed: () => _launchSocial(_facebookUrl)),
-                          if (_twitterUrl.isNotEmpty)
-                            IconButton(icon: const FaIcon(FontAwesomeIcons.xTwitter, color: Colors.grey, size: 30), onPressed: () => _launchSocial(_twitterUrl)),
-                          if (_instagramUrl.isNotEmpty)
-                            IconButton(icon: const FaIcon(FontAwesomeIcons.instagram, color: Colors.pink, size: 30), onPressed: () => _launchSocial(_instagramUrl)),
-                        ],
-                      ),
-                      const SizedBox(height: 40),
-                    ],
+                  // 2. CENTRAL AVATAR & INFO (Match iOS Reference)
+                  Center(
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.white, width: 4),
+                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                              ),
+                              child: CircleAvatar(
+                                radius: 50,
+                                backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                                backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty) ? NetworkImage(_avatarUrl!) : null,
+                                child: (_avatarUrl == null || _avatarUrl!.isEmpty) ? Icon(Icons.person, size: 50, color: Colors.grey.shade400) : null,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _uploadAvatar,
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white, 
+                                  shape: BoxShape.circle,
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))],
+                                ),
+                                child: _isUploadingAvatar 
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
+                                  : const Icon(Icons.edit, color: AppTheme.primaryColor, size: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(_name, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
+                        const SizedBox(height: 6),
+                        
+                        // GOLD BADGE
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4AF37).withOpacity(0.15), 
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3))
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.verified_rounded, color: Color(0xFFD4AF37), size: 14),
+                              SizedBox(width: 6),
+                              Text('Standard Member', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.w700, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(height: 32),
+
+                  // 3. SETTINGS GROUP
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
+                        const SizedBox(height: 12),
+                        
+                        // The White Settings Card Container
+                        Container(
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.03), blurRadius: 15, offset: const Offset(0, 5))],
+                          ),
+                          child: Column(
+                            children: [
+                              _buildSettingsRow(Icons.account_balance_wallet_outlined, 'KAIDA Wallet', '$_walletBalance KAIDA', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet top-up coming soon!'), behavior: SnackBarBehavior.floating)), iconColor: iconColor, textColor: textColor),
+                              _buildDivider(isDark),
+                              _buildSettingsRow(Icons.favorite_border_rounded, 'My Wishlist', '', onTap: () => _openWebDashboard('My Wishlist', '/wishlist.php'), iconColor: iconColor, textColor: textColor),
+                              if (_role == 'instructor' || _role == 'admin') ...[
+                                _buildDivider(isDark),
+                                _buildSettingsRow(Icons.dashboard_outlined, 'Instructor Panel', '', onTap: () => _openWebDashboard('Instructor Panel', '/instructor/dashboard.php'), iconColor: iconColor, textColor: textColor),
+                              ],
+                              if (_role == 'affiliate' || _role == 'admin') ...[
+                                _buildDivider(isDark),
+                                _buildSettingsRow(Icons.campaign_outlined, 'Affiliate Panel', '', onTap: () => _openWebDashboard('Affiliate Panel', '/affiliate/dashboard.php'), iconColor: iconColor, textColor: textColor),
+                              ],
+                              _buildDivider(isDark),
+                              _buildSettingsRow(Icons.lock_outline_rounded, 'Change Password', '', onTap: _showChangePasswordModal, iconColor: iconColor, textColor: textColor),
+                              _buildDivider(isDark),
+                              _buildSettingsRow(Icons.share_outlined, 'Share Application', '', onTap: _shareApp, iconColor: iconColor, textColor: textColor),
+                              _buildDivider(isDark),
+                              // Dark Mode Toggle directly inside the grouped list
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.dark_mode_outlined, color: iconColor, size: 22),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: Text('Dark Theme', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor))),
+                                    Switch(
+                                      value: themeProvider.isDarkMode,
+                                      onChanged: (val) => themeProvider.toggleTheme(val),
+                                      activeColor: AppTheme.primaryColor,
+                                      activeTrackColor: AppTheme.primaryColor.withOpacity(0.3),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 40),
+
+                        // 4. SOCIAL FOOTER
+                        Center(
+                          child: Column(
+                            children: [
+                              Text("Connect with us", style: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_facebookUrl.isNotEmpty)
+                                    IconButton(icon: const FaIcon(FontAwesomeIcons.facebook, color: Colors.blueAccent, size: 24), onPressed: () => _launchSocial(_facebookUrl)),
+                                  if (_twitterUrl.isNotEmpty)
+                                    IconButton(icon: FaIcon(FontAwesomeIcons.xTwitter, color: isDark ? Colors.white : Colors.black87, size: 24), onPressed: () => _launchSocial(_twitterUrl)),
+                                  if (_instagramUrl.isNotEmpty)
+                                    IconButton(icon: const FaIcon(FontAwesomeIcons.instagram, color: Colors.pinkAccent, size: 24), onPressed: () => _launchSocial(_instagramUrl)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
     );
   }
 
-  Widget _buildSwitchTile(IconData icon, String title, bool value, Function(bool) onChanged, bool isDark, Color surfaceColor, Color textColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
-      child: SwitchListTile(
-        secondary: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.1), shape: BoxShape.circle),
-          child: Icon(icon, color: AppTheme.primaryColor, size: 20),
+  Widget _buildSettingsRow(IconData icon, String title, String trailingText, {required VoidCallback onTap, required Color iconColor, required Color textColor}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 22),
+            const SizedBox(width: 16),
+            Expanded(child: Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor))),
+            if (trailingText.isNotEmpty) 
+              Text(trailingText, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 14)),
+            if (trailingText.isEmpty)
+              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey.shade400),
+          ],
         ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-        value: value,
-        onChanged: onChanged,
-        activeColor: AppTheme.primaryColor,
       ),
     );
   }
 
-  Widget _buildMenuTile(IconData icon, String title, VoidCallback onTap, bool isDark, Color surfaceColor, Color textColor, {bool isDestructive = false}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: isDestructive ? Colors.red.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(isDark ? 0.2 : 0.1), shape: BoxShape.circle),
-          child: Icon(icon, color: isDestructive ? Colors.red : AppTheme.primaryColor, size: 20),
-        ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isDestructive ? Colors.red : textColor)),
-        trailing: Icon(Icons.arrow_forward_ios, size: 14, color: isDark ? Colors.grey.shade600 : Colors.grey),
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
-class WebDashboardScreen extends StatefulWidget {
-  final String title;
-  final String url;
-  const WebDashboardScreen({Key? key, required this.title, required this.url}) : super(key: key);
-  @override
-  _WebDashboardScreenState createState() => _WebDashboardScreenState();
-}
-
-class _WebDashboardScreenState extends State<WebDashboardScreen> {
-  late final WebViewController _controller;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (String url) { if (mounted) setState(() => _isLoading = true); },
-          onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.url));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)), iconTheme: const IconThemeData(color: Colors.white)),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading) Center(child: KaidaLoader()), // INJECTED KAIDA LOADER HERE
-        ],
-      ),
-    );
+  Widget _buildDivider(bool isDark) {
+    return Divider(height: 1, thickness: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade100, indent: 54);
   }
 }
