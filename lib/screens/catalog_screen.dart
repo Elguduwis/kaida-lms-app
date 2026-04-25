@@ -21,12 +21,13 @@ class CatalogItem {
   final String categoryName;
   final String productType;
   final DateTime? releaseDate;
+  final String language; // NEW: Language attribute
 
   CatalogItem({
     required this.id, required this.slug, required this.title, required this.thumbnailUrl,
     required this.instructorName, required this.price, required this.discountPrice,
     required this.isFree, required this.type, required this.categoryName,
-    this.productType = '', this.releaseDate,
+    this.productType = '', this.releaseDate, required this.language,
   });
 
   bool get isComingSoon {
@@ -58,6 +59,7 @@ class CatalogItem {
       categoryName: json['category_name']?.toString() ?? 'General',
       productType: json['product_type']?.toString() ?? '',
       releaseDate: parsedDate,
+      language: json['language']?.toString() ?? 'Hausa', // Fallback ensures UI never crashes
     );
   }
 }
@@ -156,6 +158,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
             }
           }
 
+          // --- SMART SORTING ALGORITHM ---
+          // This forces active courses to the top, and 'Coming Soon' to the bottom
+          parsedItems.sort((a, b) {
+            if (a.isComingSoon && !b.isComingSoon) return 1;
+            if (!a.isComingSoon && b.isComingSoon) return -1;
+            return 0; // Maintain natural API order otherwise
+          });
+
           if (mounted) {
             setState(() {
               _allItems = parsedItems;
@@ -214,11 +224,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic theme check
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      // Let the theme dictate the background
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -235,7 +243,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
               child: Container(
                 decoration: BoxDecoration(
-                  // Dynamic search bar background
                   color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
@@ -283,7 +290,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 20),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            // Dynamic category chips
                             color: isSelected ? AppTheme.primaryColor : (isDark ? AppTheme.darkSurfaceColor : Colors.white),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: isSelected ? AppTheme.primaryColor : (isDark ? Colors.grey.shade700 : Colors.grey.shade300)),
@@ -346,7 +352,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        // Dynamic card background
         color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.grey.withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 5))],
@@ -369,7 +374,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 fit: StackFit.expand,
                 children: [
                   item.thumbnailUrl.isNotEmpty
-                      // CACHED OFFLINE IMAGE
                       ? CachedNetworkImage(
                           imageUrl: item.thumbnailUrl,
                           fit: BoxFit.cover,
@@ -377,12 +381,33 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, color: Colors.white)),
                         )
                       : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
+                  
+                  // NEW: Category & Language Badges
                   Positioned(
                     top: 8, left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
-                      child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+                          child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        ),
+                        if (widget.actionType == 'courses') ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.9), borderRadius: BorderRadius.circular(8)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.language, size: 9, color: Colors.white),
+                                const SizedBox(width: 3),
+                                Text(item.language.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ]
+                      ],
                     ),
                   ),
                   Positioned(
@@ -391,7 +416,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       onTap: () => _toggleWishlist(item),
                       child: Container(
                         padding: const EdgeInsets.all(6),
-                        // Dynamic wishlist button background
                         decoration: BoxDecoration(color: isDark ? Colors.grey.shade800 : Colors.white, shape: BoxShape.circle),
                         child: Icon(
                           _wishlistedIds.contains(item.id) ? Icons.favorite : Icons.favorite_border,
@@ -420,14 +444,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Dynamic text color
                         Text(item.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.2, color: isDark ? Colors.white : Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 6),
                         Row(
                           children: [
                             Icon(widget.actionType == 'courses' ? Icons.person : Icons.inventory_2, size: 12, color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                             const SizedBox(width: 4),
-                            // Dynamic subtitle color
                             Expanded(child: Text(subtitleText, style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
                           ],
                         ),
@@ -452,7 +474,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Dynamic strikethrough color
           Text('₦${item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: isDark ? Colors.grey.shade500 : Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w600)),
           Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryColor)),
         ],
