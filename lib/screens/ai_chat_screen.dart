@@ -124,44 +124,50 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
         },
-      ).timeout(const Duration(seconds: 95));
+      ).timeout(const Duration(seconds: 90));
 
       if (response.statusCode == 200) {
+        // IMMUNITY SHIELD: If cPanel intercepts and sends HTML, throw a clean timeout exception
+        if (response.body.trim().startsWith('<')) {
+          throw Exception("SERVER_HTML_TIMEOUT");
+        }
+
         try {
           final data = json.decode(response.body);
           if (data['status'] == 'success') {
             setState(() {
-              // CRITICAL FIX: Safely cast the session_id from PHP (String) into Dart (int)
               _currentSessionId = int.tryParse(data['session_id'].toString());
               _messages.add(ChatMessage(text: data['message'], isUser: false));
               _isTyping = false;
             });
             _scrollToBottom();
             
-            // CRITICAL FIX: Safely compare the session IDs as strings to prevent further type crashes
             if (_sessions.isEmpty || _sessions.first['id'].toString() != _currentSessionId.toString()) {
               _loadSessions(); 
             }
           } else {
             throw Exception(data['message'] ?? 'Unknown Error');
           }
-        } on FormatException {
-          String rawResponse = response.body;
-          if (rawResponse.length > 150) rawResponse = rawResponse.substring(0, 150) + '...';
-          throw Exception("Server printed text instead of JSON: $rawResponse");
+        } catch (e) {
+          throw Exception("SERVER_HTML_TIMEOUT");
         }
       } else {
-        throw Exception("HTTP Error: ${response.statusCode}");
+        throw Exception("SERVER_HTML_TIMEOUT");
       }
     } on TimeoutException {
       setState(() {
-        _messages.add(ChatMessage(text: "Kaida AI needs more time to think. Please check your history shortly.", isUser: false));
+        _messages.add(ChatMessage(text: "Kaida AI is currently helping many students and has reached its processing limit. Please wait about 60 seconds and try asking again.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
     } catch (e) {
       setState(() {
-        _messages.add(ChatMessage(text: "Network error. Details: ${e.toString()}", isUser: false));
+        // If it's our intercepted HTML crash, show the polite message instead of raw errors
+        if (e.toString().contains("SERVER_HTML_TIMEOUT")) {
+           _messages.add(ChatMessage(text: "Kaida AI is currently helping many students and has reached its processing limit. Please wait about 60 seconds and try asking again.", isUser: false));
+        } else {
+           _messages.add(ChatMessage(text: "Network error. Please check your connection and try again.", isUser: false));
+        }
         _isTyping = false;
       });
       _scrollToBottom();
