@@ -32,7 +32,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<Map<String, dynamic>> _sessions = [];
   bool _isTyping = false;
   bool _isLoadingHistory = false;
-  String _selectedLanguage = 'English'; // BILINGUAL TOGGLE
+  String _selectedLanguage = 'English'; 
   
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -93,10 +93,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
     Navigator.pop(context); 
 
     try {
-      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=get_history&session_id=$sessionId'));
+      // CRITICAL FIX: Appended &user_id=$_userId so the server actually returns the data!
+      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=get_history&session_id=$sessionId&user_id=$_userId'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success') {
+        if (data['status'] == 'success' && data['data'] != null) {
           List<ChatMessage> loaded = [];
           for (var msg in data['data']) {
             loaded.add(ChatMessage(text: msg['message'].toString(), isUser: msg['role'] == 'user'));
@@ -106,10 +107,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
             _isLoadingHistory = false;
           });
           _scrollToBottom();
+        } else {
+          throw Exception(data['message'] ?? "Unknown load error");
         }
       }
     } catch (e) {
-      setState(() => _isLoadingHistory = false);
+      setState(() {
+        _isLoadingHistory = false;
+        _messages.add(ChatMessage(text: "Could not load history. Details: ${e.toString()}", isUser: false));
+      });
     }
   }
 
@@ -462,7 +468,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             if (href != null && href.startsWith('kaida://course/')) {
                               final slug = href.replaceAll('kaida://course/', '');
                               
-                              // SMART FETCH: Load the real catalog item dynamically!
                               showDialog(
                                 context: context,
                                 barrierDismissible: false,
@@ -471,7 +476,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
                               try {
                                 final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'));
-                                Navigator.pop(context); // close loader
+                                Navigator.pop(context); 
                                 
                                 if (response.statusCode == 200) {
                                   final data = json.decode(response.body);
