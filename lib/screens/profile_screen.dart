@@ -1,4 +1,3 @@
-import 'main_layout.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -14,6 +13,7 @@ import '../config/app_theme.dart';
 import '../config/theme_provider.dart';
 import '../widgets/kaida_loader.dart';
 import 'login_screen.dart';
+import 'main_layout.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -59,7 +59,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           setState(() {
             _name = pData['data']['name'] ?? 'Learner';
             _email = pData['data']['email'] ?? '';
-            // Safe parsing to ensure no null breaks the UI
             _role = pData['data']['role']?.toString().trim() ?? 'student';
             _avatarUrl = pData['data']['avatar_url'];
           });
@@ -233,12 +232,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const LoginScreen()), (Route<dynamic> route) => false);
   }
 
-  // --- UPGRADED: BULLETPROOF FUZZY MATCHING BADGE GENERATOR ---
   Widget _buildRoleBadge(String role) {
     String safeRole = role.toLowerCase().trim();
     
     String title = 'Standard Member';
-    Color badgeColor = const Color(0xFFD4AF37); // Default Gold
+    Color badgeColor = const Color(0xFFD4AF37); 
     IconData icon = Icons.verified_rounded;
 
     if (safeRole.contains('admin')) {
@@ -343,8 +341,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 16),
                         Text(_name, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 6),
-                        
-                        // DEPLOYS THE NEW BULLETPROOF BADGE
                         _buildRoleBadge(_role),
                       ],
                     ),
@@ -372,7 +368,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _buildDivider(isDark),
                               _buildSettingsRow(Icons.favorite_border_rounded, 'My Wishlist', '', onTap: () => _openWebDashboard('My Wishlist', '/wishlist.php'), iconColor: iconColor, textColor: textColor),
                               
-                              // Check visibility using the same safe logic
                               if (_role.trim().toLowerCase().contains('instructor') || _role.trim().toLowerCase().contains('admin')) ...[
                                 _buildDivider(isDark),
                                 _buildSettingsRow(Icons.dashboard_outlined, 'Instructor Panel', '', onTap: () => _openWebDashboard('Instructor Panel', '/instructor/dashboard.php'), iconColor: iconColor, textColor: textColor),
@@ -502,6 +497,23 @@ class _WebDashboardScreenState extends State<WebDashboardScreen> {
         title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: AppTheme.primaryColor,
+        actions: [
+          // EXPLICITLY ADDED HOME BUTTON HERE
+          IconButton(
+            icon: const Icon(Icons.home_rounded),
+            onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const MainLayout(initialIndex: 0)), 
+              (route) => false
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh), 
+            onPressed: () {
+              setState(() { _hasError = false; _isLoading = true; });
+              _controller.reload();
+            }
+          ),
+        ],
       ),
       body: Stack(
         children: [

@@ -1,4 +1,3 @@
-import 'main_layout.dart';
 import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../config/app_theme.dart';
 import 'catalog_screen.dart';
 import 'course_player_screen.dart';
+import 'main_layout.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final CatalogItem item;
@@ -121,7 +121,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)
       ));
     } else {
-      // UPGRADED ROUTING: Courses go directly to enroll.php, Products go to view_product.php
       String targetPath = widget.item.type == 'courses'
           ? '/enroll.php?course_id=${widget.item.id}'
           : '/view_product.php?slug=${widget.item.slug}';
@@ -282,7 +281,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                   ),
                   onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction,
                   child: Text(
-                    // FIXED: Now displays ENROLL explicitly for all courses
                     _isEnrolled && widget.item.type == 'courses' ? 'START' : (widget.item.type == 'courses' ? 'ENROLL' : 'BUY NOW'),
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
                   ),
@@ -401,9 +399,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 }
 
-// -----------------------------------------------------------------------------
-// SECURE OFFLINE-PROTECTED CHECKOUT WEBVIEW
-// -----------------------------------------------------------------------------
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -416,7 +411,7 @@ class CheckoutWebViewScreen extends StatefulWidget {
 class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
-  bool _hasError = false; // GLOBALLY TRACKS CONNECTION ERRORS
+  bool _hasError = false; 
 
   @override
   void initState() {
@@ -432,7 +427,6 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           onPageFinished: (String url) { 
             if (mounted) setState(() => _isLoading = false); 
           },
-          // INTERCEPTS THE NETWORK ERROR BEFORE IT SHOWS IN THE BROWSER
           onWebResourceError: (WebResourceError error) {
             if (mounted) setState(() { _isLoading = false; _hasError = true; });
           },
@@ -458,6 +452,14 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
+            // EXPLICITLY ADDED HOME BUTTON HERE
+            IconButton(
+              icon: const Icon(Icons.home_rounded),
+              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const MainLayout(initialIndex: 0)), 
+                (route) => false
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.refresh), 
               onPressed: () {
@@ -470,7 +472,6 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
         body: Stack(
           children: [
             if (_hasError)
-              // BEAUTIFUL NATIVE ERROR SCREEN
               Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
