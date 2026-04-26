@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -23,7 +24,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   int? _currentSessionId;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
   List<ChatMessage> _messages = [];
   List<Map<String, dynamic>> _sessions = [];
   bool _isTyping = false;
@@ -69,7 +69,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _currentSessionId = sessionId;
       _messages.clear();
     });
-    
     Navigator.pop(context); // Close drawer
 
     try {
@@ -114,6 +113,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scrollToBottom();
 
     try {
+      // Added an explicit 25-second timeout to prevent indefinite hanging
       final response = await http.post(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=chat'),
         body: {
@@ -121,7 +121,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
         },
-      );
+      ).timeout(const Duration(seconds: 25));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -137,8 +137,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
           }
         }
       } else {
-        throw Exception();
+        throw Exception("Server Error");
       }
+    } on TimeoutException {
+      setState(() {
+        _messages.add(ChatMessage(text: "Request timed out. The AI took too long to respond. Please try again.", isUser: false));
+        _isTyping = false;
+      });
+      _scrollToBottom();
     } catch (e) {
       setState(() {
         _messages.add(ChatMessage(text: "Network error. Please try again.", isUser: false));
@@ -163,7 +169,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : const Color(0xFFF8F9FE),
@@ -321,7 +326,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
       bottomLeft: Radius.circular(message.isUser ? 20 : 0),
       bottomRight: Radius.circular(message.isUser ? 0 : 20),
     );
-
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
