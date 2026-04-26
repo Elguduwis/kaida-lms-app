@@ -1,75 +1,67 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primaryColor = Color(0xFF7351FF);
-  static const Color secondaryColor = Color(0xFF1E1E2D);
-  
-  // Light Theme Colors
-  static const Color backgroundColor = Color(0xFFF3F5F9);
-  
-  // Dark Theme Colors
-  static const Color darkBackgroundColor = Color(0xFF121212);
-  static const Color darkSurfaceColor = Color(0xFF1E1E1E);
+  // Official Kaida Brand Colors
+  static const Color primaryColor = Color(0xFF7351FF); // Kaida Purple
+  static const Color accentColor = Color(0xFF00E5FF);
+  static const Color textMainMode = Color(0xFF1A1A1A);
+  static const Color textDarkMode = Color(0xFFF0F0F0);
 
-  static final ThemeData lightTheme = ThemeData(
-    brightness: Brightness.light,
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: backgroundColor,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: primaryColor,
-      elevation: 0,
-      iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: Colors.white,
-      selectedItemColor: primaryColor,
-      unselectedItemColor: Colors.grey,
-    ),
-    cardTheme: const CardThemeData(
-      color: Colors.white,
-      elevation: 1,
-      surfaceTintColor: Colors.transparent,
-    ),
-    listTileTheme: const ListTileThemeData(
-      iconColor: primaryColor,
-      textColor: Colors.black87,
-    ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: Colors.black87),
-      bodyMedium: TextStyle(color: Colors.black87),
-      titleLarge: TextStyle(color: Colors.black),
-    ),
-  );
+  static ThemeData get lightTheme {
+    return ThemeData(
+      brightness: Brightness.light,
+      primaryColor: primaryColor,
+      scaffoldBackgroundColor: Colors.white,
+      fontFamily: 'DMSans', // Standard LMS font choice
+      colorScheme: const ColorScheme.light(
+        primary: primaryColor,
+        secondary: accentColor,
+        surface: Colors.white,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: textMainMode,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        ),
+      ),
+    );
+  }
 
-  static final ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark,
-    primaryColor: primaryColor,
-    scaffoldBackgroundColor: darkBackgroundColor,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: darkSurfaceColor,
-      elevation: 0,
-      iconTheme: IconThemeData(color: Colors.white),
-      titleTextStyle: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-    ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData(
-      backgroundColor: darkSurfaceColor,
-      selectedItemColor: primaryColor,
-      unselectedItemColor: Colors.grey.shade500,
-    ),
-    cardTheme: const CardThemeData(
-      color: darkSurfaceColor,
-      elevation: 1,
-      surfaceTintColor: Colors.transparent, // Prevents Flutter 3's weird color tinting
-    ),
-    listTileTheme: const ListTileThemeData(
-      iconColor: primaryColor,
-      textColor: Colors.white,
-    ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: Colors.white),
-      bodyMedium: TextStyle(color: Colors.white70),
-      titleLarge: TextStyle(color: Colors.white),
-    ),
-  );
+  static ThemeData get darkTheme {
+    return ThemeData(
+      brightness: Brightness.dark,
+      primaryColor: primaryColor,
+      scaffoldBackgroundColor: const Color(0xFF121212),
+      fontFamily: 'DMSans',
+      colorScheme: const ColorScheme.dark(
+        primary: primaryColor,
+        secondary: accentColor,
+        surface: const Color(0xFF1E1E2C),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: textDarkMode,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        ),
+      ),
+    );
+  }
 }

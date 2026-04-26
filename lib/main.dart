@@ -1,34 +1,48 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
-import 'config/theme_provider.dart';
-import 'screens/splash_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/main_layout.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: const MyApp(),
-    ),
-  );
+  
+  final prefs = await SharedPreferences.getInstance();
+  
+  // Flag to check if onboarding has been shown
+  final bool isFirstTime = prefs.getBool('first_time_user') ?? true;
+  
+  // Flag to check if user is logged in (relying on existing auth logic)
+  final String? token = prefs.getString('auth_token');
+
+  Widget initialScreen;
+  
+  if (isFirstTime) {
+    initialScreen = const OnboardingScreen();
+  } else if (token != null && token.isNotEmpty) {
+    initialScreen = const MainLayout();
+  } else {
+    initialScreen = const LoginScreen();
+  }
+
+  runApp(KaidaApp(initialScreen: initialScreen));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class KaidaApp extends StatelessWidget {
+  final Widget initialScreen;
+  
+  const KaidaApp({Key? key, required this.initialScreen}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
     return MaterialApp(
       title: 'Kaida Learn',
       debugShowCheckedModeBanner: false,
-      themeMode: themeProvider.themeMode,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      // INTERCEPT APP LOAD WITH THE VERSION GUARD
-      home: const SplashScreen(), 
+      themeMode: ThemeMode.system, // Respect system theme settings
+      home: initialScreen,
     );
   }
 }
