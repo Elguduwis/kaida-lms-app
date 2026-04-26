@@ -14,7 +14,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // Split titles into black and purple segments for the RichText effect
+  // Expanded descriptive texts
   final List<Map<String, String>> _pages = [
     {
       'type': 'welcome',
@@ -26,21 +26,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'image': 'assets/images/onboarding_1.png',
       'title_black': 'Expert-Led ',
       'title_purple': 'Courses',
-      'subtitle': 'Learn high-income skills in English and Hausa.',
+      'subtitle': 'Master high-income digital skills tailored for the African context. Access premium, expert-led courses crafted meticulously in both English and professional Hausa to accelerate your tech career.',
     },
     {
       'type': 'image',
       'image': 'assets/images/onboarding_2.png',
       'title_black': 'Earn ',
       'title_purple': 'Kaida Tokens',
-      'subtitle': 'Get rewarded for your progress and achievements.',
+      'subtitle': 'Experience education that pays you back. Get rewarded with official KAIDA TOKENS for your progress, complete learning milestones, and unlock exclusive platform benefits as you grow.',
     },
     {
       'type': 'image',
       'image': 'assets/images/onboarding_3.png',
       'title_black': 'Join the ',
       'title_purple': 'Community',
-      'subtitle': 'Connect with fellow learners and grow together.',
+      'subtitle': 'You are never learning alone. Connect with thousands of ambitious youths, share ideas, access premium mentorship, and build your professional network in our interactive digital community.',
     },
   ];
 
@@ -85,7 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Text(
                       page['title']!,
                       style: const TextStyle(
-                        fontSize: 48, // Slightly larger for impact
+                        fontSize: 48, 
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -1.0,
@@ -98,36 +98,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // IMAGE WITH BOTTOM FADE (SHADER MASK)
                         ShaderMask(
                           shaderCallback: (Rect bounds) {
                             return LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [Colors.white, Colors.white.withOpacity(0.0)],
-                              stops: const [0.7, 1.0], // Fades out perfectly at the bottom 30%
+                              stops: const [0.75, 1.0], 
                             ).createShader(bounds);
                           },
                           blendMode: BlendMode.dstIn,
                           child: Image.asset(
                             page['image']!,
-                            height: 350, // Increased height for better presence
+                            height: 330,
                             fit: BoxFit.contain,
                             errorBuilder: (context, error, stackTrace) =>
                                 const Icon(Icons.broken_image, size: 100),
                           ),
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 35),
                         
-                        // RICH TEXT: BLACK + PURPLE ACCENTS
                         RichText(
                           textAlign: TextAlign.center,
                           text: TextSpan(
                             style: TextStyle(
-                              fontSize: 32, // Increased text size
+                              fontSize: 28, 
                               fontWeight: FontWeight.w900,
                               fontFamily: 'DMSans',
-                              color: isDark ? Colors.white : Colors.black, // PURE BLACK
+                              color: isDark ? Colors.white : Colors.black, 
                             ),
                             children: [
                               TextSpan(text: page['title_black']),
@@ -138,17 +136,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 18),
                         
-                        // INCREASED SUBTITLE
                         Text(
                           page['subtitle']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 18, // Increased from 16
+                            fontSize: 16, 
                             fontWeight: FontWeight.w500,
-                            color: isDark ? Colors.grey.shade300 : Colors.black87, // Solid dark colors
-                            height: 1.5,
+                            color: isDark ? Colors.grey.shade300 : Colors.black87, 
+                            height: 1.6, 
                           ),
                         ),
                       ],
@@ -168,11 +165,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Text(
                     'Skip',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontFamily: 'sans-serif', // Polished system font override
+                      fontSize: 17,
+                      fontFamily: 'sans-serif', 
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                      color: isDark ? Colors.white : Colors.black, // Pure black
+                      color: isDark ? Colors.white : Colors.black, 
                     ),
                   ),
                 ),
