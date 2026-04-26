@@ -1,3 +1,4 @@
+import 'main_layout.dart';
 import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -10,7 +11,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../config/app_theme.dart';
 import 'catalog_screen.dart';
 import 'course_player_screen.dart';
-import 'main_layout.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final CatalogItem item;
@@ -27,10 +27,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   Map<String, dynamic>? _extraDetails;
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
+  
+  late CatalogItem _currentItem; // NEW: Allows UI to update dynamically from AI deep links
 
   @override
   void initState() {
     super.initState();
+    _currentItem = widget.item;
     _initializeUserAndData();
   }
 
@@ -40,7 +43,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
     await _checkEnrollmentStatus(prefs);
 
-    if (widget.item.type == 'courses') {
+    if (_currentItem.type == 'courses') {
       await _fetchExtraDetails();
     } else {
       if (mounted) setState(() => _isLoading = false);
@@ -51,7 +54,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     final cached = prefs.getString('cached_my_courses');
     if (cached != null) {
       List myCourses = json.decode(cached);
-      if (myCourses.any((c) => c['id'].toString() == widget.item.id.toString())) {
+      if (myCourses.any((c) => c['id'].toString() == _currentItem.id.toString() || c['slug'] == _currentItem.slug)) {
         if (mounted) setState(() => _isEnrolled = true);
       }
     }
@@ -59,13 +62,38 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
   Future<void> _fetchExtraDetails() async {
     try {
-      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/course_details.php?slug=${widget.item.slug}'));
+      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/course_details.php?slug=${_currentItem.slug}'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
           if (mounted) {
             setState(() {
               _extraDetails = data['data'];
+              
+              // HYDRATION: Update the dummy deep link item with real server data!
+              if (_extraDetails != null && _extraDetails!['course'] != null) {
+                final c = _extraDetails!['course'];
+                String rawThumb = c['thumbnail_url']?.toString() ?? '';
+                if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
+                  rawThumb = 'https://academy.kainuwa.africa/$rawThumb';
+                }
+                
+                _currentItem = CatalogItem(
+                  id: int.tryParse(c['id'].toString()) ?? _currentItem.id,
+                  slug: _currentItem.slug,
+                  title: c['title']?.toString() ?? _currentItem.title,
+                  thumbnailUrl: rawThumb.isNotEmpty ? rawThumb : _currentItem.thumbnailUrl,
+                  instructorName: c['instructor_name']?.toString() ?? c['username']?.toString() ?? _currentItem.instructorName,
+                  price: double.tryParse(c['price']?.toString() ?? '0') ?? _currentItem.price,
+                  discountPrice: double.tryParse(c['discount_price']?.toString() ?? '0') ?? _currentItem.discountPrice,
+                  isFree: c['is_free']?.toString() == '1',
+                  type: _currentItem.type,
+                  categoryName: c['category_name']?.toString() ?? _currentItem.categoryName,
+                  language: c['language']?.toString() ?? _currentItem.language,
+                  releaseDate: c['release_date'] != null ? DateTime.tryParse(c['release_date'].toString()) : _currentItem.releaseDate,
+                );
+              }
+              
               _isLoading = false;
             });
             _initializeVideoPlayer();
@@ -116,20 +144,20 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
       return;
     }
 
-    if (_isEnrolled && widget.item.type == 'courses') {
+    if (_isEnrolled && _currentItem.type == 'courses') {
       Navigator.push(context, MaterialPageRoute(
-        builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)
+        builder: (context) => CoursePlayerScreen(courseId: _currentItem.id, courseTitle: _currentItem.title)
       ));
     } else {
-      String targetPath = widget.item.type == 'courses'
-          ? '/enroll.php?course_id=${widget.item.id}'
-          : '/view_product.php?slug=${widget.item.slug}';
+      String targetPath = _currentItem.type == 'courses'
+          ? '/enroll.php?course_id=${_currentItem.id}'
+          : '/view_product.php?slug=${_currentItem.slug}';
 
       String encodedRedirect = Uri.encodeComponent(targetPath);
       String authBridgeUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$encodedRedirect';
 
       Navigator.push(context, MaterialPageRoute(builder: (context) => CheckoutWebViewScreen(
-        title: widget.item.type == 'courses' ? 'Enroll Course' : 'Buy Product',
+        title: _currentItem.type == 'courses' ? 'Enroll Course' : 'Buy Product',
         url: authBridgeUrl,
       )));
     }
@@ -185,13 +213,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          widget.item.categoryName,
+                          _currentItem.categoryName,
                           style: const TextStyle(color: AppTheme.primaryColor, fontSize: 12, fontWeight: FontWeight.bold)
                         ),
                       ),
                       const SizedBox(height: 12),
 
-                      Text(widget.item.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
+                      Text(_currentItem.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 12),
 
                       Row(
@@ -207,20 +235,20 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                 : null,
                           ),
                           const SizedBox(width: 8),
-                          Icon(widget.item.type == 'courses' ? Icons.school : Icons.store, size: 14, color: subTextColor),
+                          Icon(_currentItem.type == 'courses' ? Icons.school : Icons.store, size: 14, color: subTextColor),
                           const SizedBox(width: 4),
-                          Text('By ${widget.item.instructorName}', style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: FontWeight.w600)),
+                          Text('By ${_currentItem.instructorName}', style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: FontWeight.w600)),
                         ],
                       ),
 
                       const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Divider()),
 
-                      if (widget.item.type == 'courses') ...[
+                      if (_currentItem.type == 'courses') ...[
                         _buildKaidaPointsDisplay(),
                         const SizedBox(height: 20),
                       ],
 
-                      Text('About this ${widget.item.type == 'courses' ? 'Course' : 'Product'}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+                      Text('About this ${_currentItem.type == 'courses' ? 'Course' : 'Product'}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                       const SizedBox(height: 12),
 
                       Text(
@@ -230,7 +258,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
 
                       const SizedBox(height: 30),
 
-                      if (widget.item.type == 'courses') ...[
+                      if (_currentItem.type == 'courses') ...[
                         Text('Curriculum', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                         const SizedBox(height: 12),
                         _buildCurriculumList(isDark, textColor, subTextColor),
@@ -258,15 +286,15 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (widget.item.discountPrice > 0 && widget.item.discountPrice < widget.item.price) ...[
-                    Text('₦${widget.item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                    Text('₦${widget.item.discountPrice.toStringAsFixed(0)}', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
-                  ] else if (widget.item.isFree || widget.item.price == 0) ...[
+                  if (_currentItem.discountPrice > 0 && _currentItem.discountPrice < _currentItem.price) ...[
+                    Text('₦${_currentItem.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: subTextColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text('₦${_currentItem.discountPrice.toStringAsFixed(0)}', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
+                  ] else if (_currentItem.isFree || _currentItem.price == 0) ...[
                     const Text('Total Price', style: TextStyle(color: Colors.grey, fontSize: 12)),
                     const Text('FREE', style: TextStyle(color: Colors.green, fontSize: 24, fontWeight: FontWeight.bold)),
                   ] else ...[
                     const Text('Total Price', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    Text('₦${widget.item.price.toStringAsFixed(0)}', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text('₦${_currentItem.price.toStringAsFixed(0)}', style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold)),
                   ]
                 ],
               ),
@@ -276,12 +304,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.item.isComingSoon ? Colors.grey : AppTheme.primaryColor,
+                    backgroundColor: _currentItem.isComingSoon ? Colors.grey : AppTheme.primaryColor,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction,
+                  onPressed: _currentItem.isComingSoon ? null : _handlePrimaryAction,
                   child: Text(
-                    _isEnrolled && widget.item.type == 'courses' ? 'START' : (widget.item.type == 'courses' ? 'ENROLL' : 'BUY NOW'),
+                    _currentItem.isComingSoon ? 'COMING SOON' : (_isEnrolled && _currentItem.type == 'courses' ? 'START' : (_currentItem.type == 'courses' ? 'ENROLL' : 'BUY NOW')),
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
                   ),
                 ),
@@ -300,9 +328,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        widget.item.thumbnailUrl.isNotEmpty
+        _currentItem.thumbnailUrl.isNotEmpty
             ? CachedNetworkImage(
-                imageUrl: widget.item.thumbnailUrl,
+                imageUrl: _currentItem.thumbnailUrl,
                 fit: BoxFit.cover,
                 errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: const Icon(Icons.image, color: Colors.white)),
               )
@@ -318,7 +346,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
           ),
         ),
 
-        if (widget.item.type == 'courses')
+        if (_currentItem.type == 'courses')
            const Center(child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 60)),
       ],
     );
@@ -399,6 +427,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 }
 
+// SECURE OFFLINE-PROTECTED CHECKOUT WEBVIEW REMAINS UNCHANGED BELOW
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -452,14 +481,6 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            // EXPLICITLY ADDED HOME BUTTON HERE
-            IconButton(
-              icon: const Icon(Icons.home_rounded),
-              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const MainLayout(initialIndex: 0)), 
-                (route) => false
-              ),
-            ),
             IconButton(
               icon: const Icon(Icons.refresh), 
               onPressed: () {

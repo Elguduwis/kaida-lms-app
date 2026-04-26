@@ -32,6 +32,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<Map<String, dynamic>> _sessions = [];
   bool _isTyping = false;
   bool _isLoadingHistory = false;
+  String _selectedLanguage = 'English'; // NEW: Language Preference
+  
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -82,7 +84,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         if (data['status'] == 'success') {
           List<ChatMessage> loaded = [];
           for (var msg in data['data']) {
-            loaded.add(ChatMessage(text: msg['message'], isUser: msg['role'] == 'user'));
+            loaded.add(ChatMessage(text: msg['message'].toString(), isUser: msg['role'] == 'user'));
           }
           setState(() {
             _messages = loaded;
@@ -93,6 +95,28 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
     } catch (e) {
       setState(() => _isLoadingHistory = false);
+    }
+  }
+
+  // NEW: Delete a session from the server
+  Future<void> _deleteSession(int sessionId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=delete_session'),
+        body: {
+          'user_id': _userId.toString(),
+          'session_id': sessionId.toString(),
+        },
+      );
+      if (response.statusCode == 200) {
+        if (_currentSessionId == sessionId) {
+           _startNewChat();
+        } else {
+           _loadSessions();
+        }
+      }
+    } catch (e) {
+      debugPrint("Failed to delete session.");
     }
   }
 
@@ -123,21 +147,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'user_id': _userId.toString(),
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
+          'language': _selectedLanguage, // PASS LANGUAGE TO AI
         },
-      ).timeout(const Duration(seconds: 90));
+      ).timeout(const Duration(seconds: 95));
 
       if (response.statusCode == 200) {
-        // IMMUNITY SHIELD: If cPanel intercepts and sends HTML, throw a clean timeout exception
-        if (response.body.trim().startsWith('<')) {
-          throw Exception("SERVER_HTML_TIMEOUT");
-        }
+        if (response.body.trim().startsWith('<')) throw Exception("SERVER_HTML_TIMEOUT");
 
         try {
           final data = json.decode(response.body);
           if (data['status'] == 'success') {
             setState(() {
               _currentSessionId = int.tryParse(data['session_id'].toString());
-              _messages.add(ChatMessage(text: data['message'], isUser: false));
+              _messages.add(ChatMessage(text: data['message'].toString(), isUser: false));
               _isTyping = false;
             });
             _scrollToBottom();
@@ -156,15 +178,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
     } on TimeoutException {
       setState(() {
-        _messages.add(ChatMessage(text: "Kaida AI is currently helping many students and has reached its processing limit. Please wait about 60 seconds and try asking again.", isUser: false));
+        _messages.add(ChatMessage(text: "Kaida AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
     } catch (e) {
       setState(() {
-        // If it's our intercepted HTML crash, show the polite message instead of raw errors
         if (e.toString().contains("SERVER_HTML_TIMEOUT")) {
-           _messages.add(ChatMessage(text: "Kaida AI is currently helping many students and has reached its processing limit. Please wait about 60 seconds and try asking again.", isUser: false));
+           _messages.add(ChatMessage(text: "Kaida AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
         } else {
            _messages.add(ChatMessage(text: "Network error. Please check your connection and try again.", isUser: false));
         }
@@ -205,6 +226,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
+          // NEW: Language Toggle Button
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedLanguage = _selectedLanguage == 'English' ? 'Hausa' : 'English';
+              });
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI Language set to $_selectedLanguage'), duration: const Duration(seconds: 1)));
+            },
+            child: Text(_selectedLanguage, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
           IconButton(
             icon: const Icon(Icons.history, color: Colors.white),
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -276,6 +307,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         leading: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         title: Text(session['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                         onTap: () => _loadHistory(int.parse(session['id'].toString())),
+                        trailing: IconButton( // NEW: Delete Chat Button
+                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                          onPressed: () => _deleteSession(int.parse(session['id'].toString())),
+                        ),
                       );
                     },
                   ),
