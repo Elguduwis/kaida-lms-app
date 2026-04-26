@@ -131,19 +131,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
           final data = json.decode(response.body);
           if (data['status'] == 'success') {
             setState(() {
-              _currentSessionId = data['session_id'];
+              // CRITICAL FIX: Safely cast the session_id from PHP (String) into Dart (int)
+              _currentSessionId = int.tryParse(data['session_id'].toString());
               _messages.add(ChatMessage(text: data['message'], isUser: false));
               _isTyping = false;
             });
             _scrollToBottom();
-            if (_sessions.isEmpty || _sessions.first['id'] != _currentSessionId) {
+            
+            // CRITICAL FIX: Safely compare the session IDs as strings to prevent further type crashes
+            if (_sessions.isEmpty || _sessions.first['id'].toString() != _currentSessionId.toString()) {
               _loadSessions(); 
             }
           } else {
             throw Exception(data['message'] ?? 'Unknown Error');
           }
         } on FormatException {
-          // Captures the raw crash text instead of hiding it!
           String rawResponse = response.body;
           if (rawResponse.length > 150) rawResponse = rawResponse.substring(0, 150) + '...';
           throw Exception("Server printed text instead of JSON: $rawResponse");
