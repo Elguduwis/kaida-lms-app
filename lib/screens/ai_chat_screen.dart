@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // NEW: Renders beautiful formatting
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
+import 'catalog_screen.dart'; // NEW: Required for deep linking
+import 'item_details_screen.dart'; // NEW: Required for deep linking
 
 class ChatMessage {
   final String text;
@@ -24,6 +27,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   int? _currentSessionId;
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  
   List<ChatMessage> _messages = [];
   List<Map<String, dynamic>> _sessions = [];
   bool _isTyping = false;
@@ -69,7 +73,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _currentSessionId = sessionId;
       _messages.clear();
     });
-    Navigator.pop(context); // Close drawer
+    Navigator.pop(context); 
 
     try {
       final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=get_history&session_id=$sessionId'));
@@ -113,6 +117,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scrollToBottom();
 
     try {
+      // FIX: Added 70-second explicit timeout for long "Help me" queries
       final response = await http.post(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=chat'),
         body: {
@@ -120,33 +125,39 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
         },
-      ).timeout(const Duration(seconds: 40)); // The only change: Added timeout handling
+      ).timeout(const Duration(seconds: 70));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          setState(() {
-            _currentSessionId = data['session_id'];
-            _messages.add(ChatMessage(text: data['message'], isUser: false));
-            _isTyping = false;
-          });
-          _scrollToBottom();
-          if (_sessions.isEmpty || _sessions.first['id'] != _currentSessionId) {
-            _loadSessions(); // Refresh list if new session created
+        try {
+          final data = json.decode(response.body);
+          if (data['status'] == 'success') {
+            setState(() {
+              _currentSessionId = data['session_id'];
+              _messages.add(ChatMessage(text: data['message'], isUser: false));
+              _isTyping = false;
+            });
+            _scrollToBottom();
+            if (_sessions.isEmpty || _sessions.first['id'] != _currentSessionId) {
+              _loadSessions(); 
+            }
+          } else {
+            throw Exception(data['message']);
           }
+        } catch (e) {
+          throw Exception("Invalid server response format");
         }
       } else {
-        throw Exception();
+        throw Exception("Server Error: ${response.statusCode}");
       }
     } on TimeoutException {
       setState(() {
-        _messages.add(ChatMessage(text: "Request timed out. The AI took too long to respond. Please try again.", isUser: false));
+        _messages.add(ChatMessage(text: "Kaida AI is taking a moment to think. Please check your chat history shortly.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
     } catch (e) {
       setState(() {
-        _messages.add(ChatMessage(text: "Network error. Please try again.", isUser: false));
+        _messages.add(ChatMessage(text: "Network error. Please try again. Details: ${e.toString()}", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
@@ -177,7 +188,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: const [
             Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-            
             SizedBox(width: 8),
             Text('Kaida AI', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           ],
@@ -187,7 +197,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history, color: Colors.white),
-        
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           )
         ],
@@ -198,41 +207,35 @@ class _AiChatScreenState extends State<AiChatScreen> {
           Expanded(
             child: _isLoadingHistory 
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-    
               : _messages.isEmpty 
-                  ?
-_buildWelcomeScreen(isDark)
+                  ? _buildWelcomeScreen(isDark)
                   : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                       itemCount: _messages.length,
-        
                       itemBuilder: (context, index) => _buildMessageBubble(_messages[index], isDark),
                     ),
           ),
           if (_isTyping)
             Padding(
               padding: const EdgeInsets.only(left: 20, bottom: 10),
-         
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: 
-isDark ? AppTheme.darkSurfaceColor : Colors.white,
+                    color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Text('Kaida AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
-           
               ),
             ),
           _buildInputArea(isDark),
         ],
       ),
     );
-}
+  }
 
   Widget _buildHistoryDrawer(bool isDark) {
     return Drawer(
@@ -243,39 +246,35 @@ isDark ? AppTheme.darkSurfaceColor : Colors.white,
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
-         
               color: AppTheme.primaryColor,
               child: const Text('Chat History', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
             ListTile(
               leading: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
               title: const Text('Start New Chat', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-     
               onTap: _startNewChat,
             ),
             const Divider(),
             Expanded(
               child: _sessions.isEmpty
                 ? Center(child: Text('No previous chats', style: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey)))
-           
                 : ListView.builder(
                     itemCount: _sessions.length,
                     itemBuilder: (context, index) {
                       final session = _sessions[index];
-return ListTile(
+                      return ListTile(
                         leading: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         title: Text(session['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                         onTap: () => _loadHistory(int.parse(session['id'].toString())),
-     
-                  );
-},
+                      );
+                    },
                   ),
             )
           ],
         ),
       ),
     );
-}
+  }
 
   Widget _buildWelcomeScreen(bool isDark) {
     return Center(
@@ -286,37 +285,32 @@ return ListTile(
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              
-decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
               child: const Icon(Icons.auto_awesome, size: 48, color: AppTheme.primaryColor),
             ),
             const SizedBox(height: 24),
             Text('Welcome to Kaida AI', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
             const SizedBox(height: 12),
-          
             Text(
               'I can help you discover your path, choose the right courses, and learn how to monetize your skills.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: isDark ?
-Colors.grey.shade400 : Colors.grey.shade600, height: 1.5),
+              style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5),
             ),
             const SizedBox(height: 40),
             Wrap(
               spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
               children: [
                 _buildQuickStarter('I don\'t know what to learn. Help me!'),
- 
                 _buildQuickStarter('Suggest a course for beginners.'),
                 _buildQuickStarter('How do I monetize my skills?'),
                 _buildQuickStarter('What are my career options?'),
               ],
             )
           ],
-    
         ),
       ),
     );
-}
+  }
 
   Widget _buildQuickStarter(String text) {
     return ActionChip(
@@ -326,26 +320,23 @@ Colors.grey.shade400 : Colors.grey.shade600, height: 1.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       onPressed: () => _handleSubmitted(text),
     );
-}
+  }
 
   Widget _buildMessageBubble(ChatMessage message, bool isDark) {
     final bgColor = message.isUser 
-        ?
-AppTheme.primaryColor 
+        ? AppTheme.primaryColor 
         : (isDark ? AppTheme.darkSurfaceColor : Colors.white);
-final textColor = message.isUser 
-        ?
-Colors.white 
+    final textColor = message.isUser 
+        ? Colors.white 
         : (isDark ? Colors.white : Colors.black87);
-    final align = message.isUser ?
-CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final align = message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final borderRadius = BorderRadius.only(
       topLeft: const Radius.circular(20),
       topRight: const Radius.circular(20),
       bottomLeft: Radius.circular(message.isUser ? 20 : 0),
       bottomRight: Radius.circular(message.isUser ? 0 : 20),
     );
-return Container(
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: align,
@@ -354,39 +345,61 @@ return Container(
             mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-            
               if (!message.isUser)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.all(6),
                   decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle),
-                 
                   child: const Icon(Icons.auto_awesome, color: Colors.white, size: 14),
                 ),
               Flexible(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                   decoration: BoxDecoration(
-    
                     color: bgColor,
                     borderRadius: borderRadius,
                     boxShadow: [
                       if (!message.isUser)
-                  
-        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
                     ]
                   ),
-                  child: Text(
-                    message.text,
-          
-                    style: TextStyle(color: textColor, fontSize: 15, height: 1.4),
-                  ),
+                  // FIX: Implementing MarkdownBody for beautiful formatting and course deep-linking
+                  child: message.isUser
+                      ? Text(message.text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4))
+                      : MarkdownBody(
+                          data: message.text,
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            p: TextStyle(color: textColor, fontSize: 15, height: 1.4),
+                            strong: TextStyle(color: textColor, fontSize: 15, fontWeight: FontWeight.bold),
+                            h1: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold),
+                            h2: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold),
+                            listBullet: TextStyle(color: textColor),
+                            a: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                          ),
+                          onTapLink: (text, href, title) {
+                            if (href != null && href.startsWith('kaida://course/')) {
+                              final slug = href.replaceAll('kaida://course/', '');
+                              
+                              // Create a structural dummy item containing the slug.
+                              // ItemDetailsScreen._fetchExtraDetails automatically fetches all missing data based on this slug!
+                              final linkedItem = CatalogItem(
+                                id: 0, slug: slug, title: text ?? 'Course Details', thumbnailUrl: '',
+                                instructorName: 'Loading...', price: 0, discountPrice: 0, isFree: false,
+                                type: 'courses', categoryName: 'Course', language: 'Hausa'
+                              );
+                              
+                              Navigator.push(context, MaterialPageRoute(
+                                builder: (context) => ItemDetailsScreen(item: linkedItem)
+                              ));
+                            }
+                          },
+                        ),
                 ),
               ),
             ],
           ),
         ],
-      
       ),
     );
   }
@@ -401,30 +414,25 @@ return Container(
       child: SafeArea(
         child: Row(
           children: [
-     
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(24),
                 ),
-   
                 child: TextField(
                   controller: _textController,
                   style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                   textCapitalization: TextCapitalization.sentences,
                   maxLines: 3,
-     
                   minLines: 1,
                   decoration: InputDecoration(
                     hintText: 'Message Kaida AI...',
-                    hintStyle: TextStyle(color: isDark ?
-Colors.grey.shade500 : Colors.grey.shade500),
+                    hintStyle: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   ),
                   onSubmitted: _handleSubmitted,
-               
                 ),
               ),
             ),
@@ -432,7 +440,6 @@ Colors.grey.shade500 : Colors.grey.shade500),
             GestureDetector(
               onTap: () => _handleSubmitted(_textController.text),
               child: Container(
-               
                 height: 48, width: 48,
                 decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle),
                 child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
@@ -441,7 +448,6 @@ Colors.grey.shade500 : Colors.grey.shade500),
           ],
         ),
       ),
-   
     );
   }
 }
