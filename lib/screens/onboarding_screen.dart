@@ -18,7 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       'type': 'welcome',
       'title': 'Kaida Learn',
-      'subtitle': 'Unlock your potential with premium digital skills.',
+      'subtitle': '',
     },
     {
       'type': 'image',
@@ -54,129 +54,175 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Exact Requirement: Screen 1 is Solid Purple, the rest are Pure White (or Dark Mode)
+    Color bgColor = _currentPage == 0 
+        ? AppTheme.primaryColor 
+        : (isDark ? AppTheme.darkBackgroundColor : Colors.white);
 
     return Scaffold(
+      backgroundColor: bgColor,
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: _pages.length,
-                onPageChanged: (int page) {
-                  setState(() {
-                    _currentPage = page;
-                  });
-                },
-                itemBuilder: (context, index) {
-                  final page = _pages[index];
+            // 1. PAGE CONTENT
+            PageView.builder(
+              controller: _pageController,
+              itemCount: _pages.length,
+              onPageChanged: (int page) {
+                setState(() {
+                  _currentPage = page;
+                });
+              },
+              itemBuilder: (context, index) {
+                final page = _pages[index];
+                
+                if (page['type'] == 'welcome') {
+                  // Exact Requirement: Solid Purple background with just "Kaida Learn" in white
+                  return Center(
+                    child: Text(
+                      page['title']!,
+                      style: const TextStyle(
+                        fontSize: 42,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -1.0,
+                      ),
+                    ),
+                  );
+                } else {
                   return Padding(
-                    padding: const EdgeInsets.all(30.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 30.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (page['type'] == 'welcome') ...[
-                          Text(
-                            page['title']!,
-                            style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryColor,
-                            ),
+                        Image.network(
+                          page['image']!,
+                          height: 320,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.broken_image, size: 100),
+                        ),
+                        const SizedBox(height: 50),
+                        Text(
+                          page['title']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? AppTheme.textDarkMode : AppTheme.textMainMode,
                           ),
-                          const SizedBox(height: 20),
-                        ] else ...[
-                          Image.network(
-                            page['image']!,
-                            height: 250,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image, size: 100),
-                          ),
-                          const SizedBox(height: 40),
-                          Text(
-                            page['title']!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? AppTheme.textDarkMode
-                                  : AppTheme.textMainMode,
-                            ),
-                          ),
-                          const SizedBox(height: 15),
-                        ],
+                        ),
+                        const SizedBox(height: 16),
                         Text(
                           page['subtitle']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 16,
-                            color: isDark
-                                ? Colors.grey.shade400
-                                : Colors.grey.shade700,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                             height: 1.5,
                           ),
                         ),
                       ],
                     ),
                   );
-                },
-              ),
+                }
+              },
             ),
-            // Replicating the distinct bottom navigation style from screenshots
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+
+            // 2. TOP RIGHT SKIP BUTTON
+            Positioned(
+              top: 10,
+              right: 20,
+              child: _currentPage < _pages.length - 1
+                  ? TextButton(
+                      onPressed: _completeOnboarding,
+                      child: Text(
+                        'Skip',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          // White text on purple background, dark text on white background
+                          color: _currentPage == 0 
+                              ? Colors.white 
+                              : (isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(),
+            ),
+
+            // 3. BOTTOM NAVIGATION (Dots + Circular Progress Button)
+            Positioned(
+              bottom: 40,
+              left: 30,
+              right: 30,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Page Indicators (Dots)
+                  // DOTS
                   Row(
                     children: List.generate(
                       _pages.length,
-                      (index) => Container(
-                        margin: const EdgeInsets.only(right: 6),
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        margin: const EdgeInsets.only(right: 8),
                         height: 8,
                         width: _currentPage == index ? 24 : 8,
                         decoration: BoxDecoration(
-                          color: _currentPage == index
-                              ? AppTheme.primaryColor
-                              : (isDark
-                                  ? Colors.grey.shade700
-                                  : Colors.grey.shade300),
+                          color: _currentPage == 0
+                              ? (_currentPage == index ? Colors.white : Colors.white.withOpacity(0.4))
+                              : (_currentPage == index
+                                  ? AppTheme.primaryColor
+                                  : (isDark ? Colors.grey.shade700 : Colors.grey.shade300)),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
                   ),
-                  // Action Buttons (Next/Start and Skip)
-                  Row(
+
+                  // EXACT REQUIREMENT: CIRCULAR PROGRESS ICON BUTTON
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
-                      if (_currentPage < _pages.length - 1)
-                        TextButton(
-                          onPressed: _completeOnboarding,
-                          child: const Text('Skip'),
-                        ),
-                      const SizedBox(width: 10),
                       SizedBox(
+                        width: 65,
+                        height: 65,
+                        child: CircularProgressIndicator(
+                          value: (_currentPage + 1) / _pages.length,
+                          strokeWidth: 3,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              _currentPage == 0 ? Colors.white : AppTheme.primaryColor),
+                          backgroundColor: _currentPage == 0
+                              ? Colors.white.withOpacity(0.2)
+                              : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                        ),
+                      ),
+                      Container(
+                        width: 50,
                         height: 50,
-                        width: _currentPage == _pages.length - 1 ? 140 : 100,
-                        child: ElevatedButton(
+                        decoration: BoxDecoration(
+                          color: _currentPage == 0 ? Colors.white : AppTheme.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            _currentPage == _pages.length - 1 
+                                ? Icons.check 
+                                : Icons.arrow_forward_ios_rounded,
+                            color: _currentPage == 0 ? AppTheme.primaryColor : Colors.white,
+                            size: 20,
+                          ),
                           onPressed: () {
                             if (_currentPage == _pages.length - 1) {
                               _completeOnboarding();
                             } else {
                               _pageController.nextPage(
-                                duration: const Duration(milliseconds: 300),
+                                duration: const Duration(milliseconds: 400),
                                 curve: Curves.easeInOut,
                               );
                             }
                           },
-                          child: Text(
-                            _currentPage == _pages.length - 1
-                                ? 'Get Started'
-                                : 'Next',
-                          ),
                         ),
                       ),
                     ],
