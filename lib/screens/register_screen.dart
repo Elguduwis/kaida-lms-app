@@ -2,37 +2,38 @@ import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/kaida_loader.dart';
-import 'main_layout.dart';
-import 'register_screen.dart';
+import 'otp_verification_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({Key? key}) : super(key: key);
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  _RegisterScreenState createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  void _handleLogin() async {
+  void _handleRegister() async {
     FocusScope.of(context).unfocus();
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    if (_nameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
       return;
     }
     
     setState(() => _isLoading = true);
-    final result = await _authService.login(_emailController.text.trim(), _passwordController.text);
+    final result = await _authService.register(_nameController.text.trim(), _emailController.text.trim(), _passwordController.text);
     if (mounted) setState(() => _isLoading = false);
 
     if (result['success']) {
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
+      // Pass email to OTP screen
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => OtpVerificationScreen(email: _emailController.text.trim())));
     } else {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
@@ -45,29 +46,33 @@ class _LoginScreenState extends State<LoginScreen> {
     
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black)),
       body: SafeArea(
         child: _isLoading 
         ? const Center(child: KaidaLoader()) 
         : SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 40),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                    child: const Icon(Icons.school_rounded, size: 60, color: AppTheme.primaryColor),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                Text('Welcome Back', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                Text('Create Account', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                 const SizedBox(height: 8),
-                Text('Log in to continue your learning journey.', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
+                Text('Join Kaida Learn and start building your future.', style: TextStyle(fontSize: 16, color: Colors.grey.shade600)),
                 const SizedBox(height: 40),
                 
-                // Email Field
+                TextField(
+                  controller: _nameController,
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: const Icon(Icons.person_outline, color: AppTheme.primaryColor),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -81,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
                 
-                // Password Field
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -97,33 +101,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2)),
                   ),
                 ),
+                const SizedBox(height: 40),
                 
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(onPressed: () {}, child: const Text('Forgot Password?', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600))),
-                ),
-                const SizedBox(height: 20),
-                
-                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _handleLogin,
-                    child: const Text('Log In', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    onPressed: _handleRegister,
+                    child: const Text('Sign Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
-                ),
-                const SizedBox(height: 40),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("Don't have an account?", style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade700)),
-                    TextButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                      child: const Text('Sign Up', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                    ),
-                  ],
                 ),
               ],
             ),

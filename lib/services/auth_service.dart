@@ -11,7 +11,6 @@ class AuthService {
         Uri.parse(ApiConfig.login),
         body: {'email': email, 'password': password},
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
@@ -21,6 +20,38 @@ class AuthService {
         } else {
           return {'success': false, 'message': data['message'] ?? 'Login failed'};
         }
+      }
+      return {'success': false, 'message': 'Server error'};
+    } catch (e) {
+      return {'success': false, 'message': 'Connection error'};
+    }
+  }
+
+  Future<Map<String, dynamic>> register(String fullName, String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.registerNative),
+        body: {'full_name': fullName, 'email': email, 'password': password},
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': data['status'] == 'success', 'message': data['message'] ?? 'Error'};
+      }
+      return {'success': false, 'message': 'Server error'};
+    } catch (e) {
+      return {'success': false, 'message': 'Connection error'};
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyOtp(String email, String otp) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.verifyOtp),
+        body: {'email': email, 'otp': otp},
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {'success': data['status'] == 'success', 'message': data['message'] ?? 'Error'};
       }
       return {'success': false, 'message': 'Server error'};
     } catch (e) {
