@@ -97,7 +97,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       appBar: AppBar(
         title: const Text('My Digital Downloads', style: TextStyle(color: Colors.white, fontSize: 16)), 
         iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: AppTheme.primaryColor,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
         elevation: 0,
       ),
       body: _isLoading
@@ -137,7 +137,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         title: Text(item['title'] ?? 'Digital Product', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                         subtitle: Text('Digital Product', style: TextStyle(color: subTextColor, fontSize: 12)),
                         trailing: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                          style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                           icon: isDownloading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.download, size: 16, color: Colors.white),
                           label: Text(isDownloading ? 'Starting...' : 'Download', style: const TextStyle(color: Colors.white)),
                           onPressed: (isDownloading || orderId == 0) ? null : () => _startNativeDownload(orderId, itemId),

@@ -239,7 +239,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            backgroundColor: AppTheme.primaryColor,
+            backgroundColor: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
             elevation: 0,
             pinned: true,
             iconTheme: const IconThemeData(color: Colors.white),
@@ -248,7 +248,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
           ),
           SliverToBoxAdapter(
             child: Container(
-              color: AppTheme.primaryColor,
+              color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
               child: Container(
                 decoration: BoxDecoration(
@@ -387,9 +387,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           imageUrl: item.thumbnailUrl,
                           fit: BoxFit.cover,
                           placeholder: (context, url) => Container(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-                          errorWidget: (context, url, error) => Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, color: Colors.white)),
+                          errorWidget: (context, url, error) => Container(color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, color: Colors.white)),
                         )
-                      : Container(color: AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
+                      : Container(color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
                   
                   Positioned(
                     top: 8, left: 8,

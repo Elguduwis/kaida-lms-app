@@ -8,14 +8,21 @@ import 'downloads_screen.dart';
 import 'ai_chat_screen.dart';
 
 class MainLayout extends StatefulWidget {
-  const MainLayout({Key? key}) : super(key: key);
+  final int initialIndex; // NEW: Allows other screens to route to specific tabs
+  const MainLayout({Key? key, this.initialIndex = 0}) : super(key: key);
 
   @override
   _MainLayoutState createState() => _MainLayoutState();
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _currentIndex = 0; 
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex; // Set initial tab based on routing
+  }
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -127,23 +134,10 @@ class _MainLayoutState extends State<MainLayout> {
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
               transform: Matrix4.translationValues(0, isSelected ? -2 : 0, 0),
-              child: Icon(
-                icon,
-                color: isSelected ? activeColor : inactiveColor,
-                size: 22, 
-              ),
+              child: Icon(icon, color: isSelected ? activeColor : inactiveColor, size: 22),
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? activeColor : inactiveColor,
-                fontSize: 9, 
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
+            Text(label, style: TextStyle(color: isSelected ? activeColor : inactiveColor, fontSize: 9, fontWeight: isSelected ? FontWeight.bold : FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)
           ],
         ),
       ),
