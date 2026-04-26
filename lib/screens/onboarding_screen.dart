@@ -14,6 +14,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  // Split titles into black and purple segments for the RichText effect
   final List<Map<String, String>> _pages = [
     {
       'type': 'welcome',
@@ -22,20 +23,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
     {
       'type': 'image',
-      'image': 'https://img.kainuwa.africa/serve?id=dhbARApv4RAD',
-      'title': 'Expert-Led Courses',
+      'image': 'assets/images/onboarding_1.png',
+      'title_black': 'Expert-Led ',
+      'title_purple': 'Courses',
       'subtitle': 'Learn high-income skills in English and Hausa.',
     },
     {
       'type': 'image',
-      'image': 'https://img.kainuwa.africa/serve?id=yLn5ZMeHcbdJ',
-      'title': 'Earn Kaida Tokens',
+      'image': 'assets/images/onboarding_2.png',
+      'title_black': 'Earn ',
+      'title_purple': 'Kaida Tokens',
       'subtitle': 'Get rewarded for your progress and achievements.',
     },
     {
       'type': 'image',
-      'image': 'https://img.kainuwa.africa/serve?id=YOdo5iOOitUe',
-      'title': 'Join the Community',
+      'image': 'assets/images/onboarding_3.png',
+      'title_black': 'Join the ',
+      'title_purple': 'Community',
       'subtitle': 'Connect with fellow learners and grow together.',
     },
   ];
@@ -55,7 +59,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Exact Requirement: Screen 1 is Solid Purple, the rest are Pure White (or Dark Mode)
     Color bgColor = _currentPage == 0 
         ? AppTheme.primaryColor 
         : (isDark ? AppTheme.darkBackgroundColor : Colors.white);
@@ -78,12 +81,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 final page = _pages[index];
                 
                 if (page['type'] == 'welcome') {
-                  // Exact Requirement: Solid Purple background with just "Kaida Learn" in white
                   return Center(
                     child: Text(
                       page['title']!,
                       style: const TextStyle(
-                        fontSize: 42,
+                        fontSize: 48, // Slightly larger for impact
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -1.0,
@@ -96,30 +98,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.network(
-                          page['image']!,
-                          height: 320,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.broken_image, size: 100),
+                        // IMAGE WITH BOTTOM FADE (SHADER MASK)
+                        ShaderMask(
+                          shaderCallback: (Rect bounds) {
+                            return LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.white, Colors.white.withOpacity(0.0)],
+                              stops: const [0.7, 1.0], // Fades out perfectly at the bottom 30%
+                            ).createShader(bounds);
+                          },
+                          blendMode: BlendMode.dstIn,
+                          child: Image.asset(
+                            page['image']!,
+                            height: 350, // Increased height for better presence
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.broken_image, size: 100),
+                          ),
                         ),
-                        const SizedBox(height: 50),
-                        Text(
-                          page['title']!,
+                        const SizedBox(height: 30),
+                        
+                        // RICH TEXT: BLACK + PURPLE ACCENTS
+                        RichText(
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.textDarkMode : AppTheme.textMainMode,
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontSize: 32, // Increased text size
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'DMSans',
+                              color: isDark ? Colors.white : Colors.black, // PURE BLACK
+                            ),
+                            children: [
+                              TextSpan(text: page['title_black']),
+                              TextSpan(
+                                text: page['title_purple'],
+                                style: const TextStyle(color: AppTheme.primaryColor),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 16),
+                        
+                        // INCREASED SUBTITLE
                         Text(
                           page['subtitle']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
-                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            fontSize: 18, // Increased from 16
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.grey.shade300 : Colors.black87, // Solid dark colors
                             height: 1.5,
                           ),
                         ),
@@ -130,27 +158,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               },
             ),
 
-            // 2. TOP RIGHT SKIP BUTTON
-            Positioned(
-              top: 10,
-              right: 20,
-              child: _currentPage < _pages.length - 1
-                  ? TextButton(
-                      onPressed: _completeOnboarding,
-                      child: Text(
-                        'Skip',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          // White text on purple background, dark text on white background
-                          color: _currentPage == 0 
-                              ? Colors.white 
-                              : (isDark ? Colors.grey.shade300 : Colors.grey.shade800),
-                        ),
-                      ),
-                    )
-                  : const SizedBox(),
-            ),
+            // 2. TOP RIGHT SKIP BUTTON (HIDDEN ON PURPLE SCREEN)
+            if (_currentPage > 0 && _currentPage < _pages.length - 1)
+              Positioned(
+                top: 10,
+                right: 20,
+                child: TextButton(
+                  onPressed: _completeOnboarding,
+                  child: Text(
+                    'Skip',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontFamily: 'sans-serif', // Polished system font override
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: isDark ? Colors.white : Colors.black, // Pure black
+                    ),
+                  ),
+                ),
+              ),
 
             // 3. BOTTOM NAVIGATION (Dots + Circular Progress Button)
             Positioned(
@@ -181,7 +207,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
 
-                  // EXACT REQUIREMENT: CIRCULAR PROGRESS ICON BUTTON
+                  // CIRCULAR PROGRESS ICON BUTTON
                   Stack(
                     alignment: Alignment.center,
                     children: [
