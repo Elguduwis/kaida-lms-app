@@ -32,9 +32,24 @@ class _AiChatScreenState extends State<AiChatScreen> {
   List<Map<String, dynamic>> _sessions = [];
   bool _isTyping = false;
   bool _isLoadingHistory = false;
-  String _selectedLanguage = 'English'; // NEW: Language Preference
+  String _selectedLanguage = 'English'; // BILINGUAL TOGGLE
   
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  final Map<String, List<String>> _quickStarters = {
+    'English': [
+      'I don\'t know what to learn. Help me!',
+      'Suggest a course for beginners.',
+      'How do I monetize my skills?',
+      'What are my career options?'
+    ],
+    'Hausa': [
+      'Ban san abin da zan koya ba. Taimake ni!',
+      'Ba ni shawarar kwas ga masu fara koyo.',
+      'Ta yaya zan sami kudi da fasahata?',
+      'Wadanne damar aiki nake da su?'
+    ]
+  };
 
   @override
   void initState() {
@@ -98,7 +113,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
-  // NEW: Delete a session from the server
   Future<void> _deleteSession(int sessionId) async {
     try {
       final response = await http.post(
@@ -147,7 +161,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'user_id': _userId.toString(),
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
-          'language': _selectedLanguage, // PASS LANGUAGE TO AI
+          'language': _selectedLanguage,
         },
       ).timeout(const Duration(seconds: 95));
 
@@ -226,15 +240,36 @@ class _AiChatScreenState extends State<AiChatScreen> {
         centerTitle: true,
         elevation: 0,
         actions: [
-          // NEW: Language Toggle Button
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _selectedLanguage = _selectedLanguage == 'English' ? 'Hausa' : 'English';
-              });
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI Language set to $_selectedLanguage'), duration: const Duration(seconds: 1)));
-            },
-            child: Text(_selectedLanguage, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedLanguage,
+                  dropdownColor: AppTheme.primaryColor,
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _selectedLanguage = newValue;
+                      });
+                    }
+                  },
+                  items: <String>['English', 'Hausa'].map<DropdownMenuItem<String>>((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.history, color: Colors.white),
@@ -307,7 +342,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         leading: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         title: Text(session['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                         onTap: () => _loadHistory(int.parse(session['id'].toString())),
-                        trailing: IconButton( // NEW: Delete Chat Button
+                        trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                           onPressed: () => _deleteSession(int.parse(session['id'].toString())),
                         ),
@@ -322,6 +357,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildWelcomeScreen(bool isDark) {
+    String welcomeTitle = _selectedLanguage == 'Hausa' ? 'Barka da zuwa Kaida AI' : 'Welcome to Kaida AI';
+    String welcomeSub = _selectedLanguage == 'Hausa' 
+        ? 'Zan iya taimaka muku gano hanyarku, zabi kwasoshin da suka dace, da kuma koyon yadda zaku sami kudi da fasaharku.' 
+        : 'I can help you discover your path, choose the right courses, and learn how to monetize your skills.';
+    
+    List<String> starters = _quickStarters[_selectedLanguage] ?? _quickStarters['English']!;
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -334,22 +376,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: const Icon(Icons.auto_awesome, size: 48, color: AppTheme.primaryColor),
             ),
             const SizedBox(height: 24),
-            Text('Welcome to Kaida AI', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+            Text(welcomeTitle, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
             const SizedBox(height: 12),
             Text(
-              'I can help you discover your path, choose the right courses, and learn how to monetize your skills.',
+              welcomeSub,
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5),
             ),
             const SizedBox(height: 40),
             Wrap(
               spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
-              children: [
-                _buildQuickStarter('I don\'t know what to learn. Help me!'),
-                _buildQuickStarter('Suggest a course for beginners.'),
-                _buildQuickStarter('How do I monetize my skills?'),
-                _buildQuickStarter('What are my career options?'),
-              ],
+              children: starters.map((text) => _buildQuickStarter(text)).toList(),
             )
           ],
         ),
@@ -421,19 +458,41 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             listBullet: TextStyle(color: textColor),
                             a: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
                           ),
-                          onTapLink: (text, href, title) {
+                          onTapLink: (text, href, title) async {
                             if (href != null && href.startsWith('kaida://course/')) {
                               final slug = href.replaceAll('kaida://course/', '');
                               
-                              final linkedItem = CatalogItem(
-                                id: 0, slug: slug, title: text ?? 'Course Details', thumbnailUrl: '',
-                                instructorName: 'Loading...', price: 0, discountPrice: 0, isFree: false,
-                                type: 'courses', categoryName: 'Course', language: 'Hausa'
+                              // SMART FETCH: Load the real catalog item dynamically!
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (BuildContext c) => const Center(child: CircularProgressIndicator()),
                               );
-                              
-                              Navigator.push(context, MaterialPageRoute(
-                                builder: (context) => ItemDetailsScreen(item: linkedItem)
-                              ));
+
+                              try {
+                                final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'));
+                                Navigator.pop(context); // close loader
+                                
+                                if (response.statusCode == 200) {
+                                  final data = json.decode(response.body);
+                                  if (data['status'] == 'success') {
+                                    List<dynamic> items = data['data'];
+                                    var courseData = items.firstWhere((item) => item['slug'] == slug, orElse: () => null);
+                                    
+                                    if (courseData != null) {
+                                      final linkedItem = CatalogItem.fromJson(courseData, 'courses');
+                                      Navigator.push(context, MaterialPageRoute(
+                                        builder: (context) => ItemDetailsScreen(item: linkedItem)
+                                      ));
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Course not found or unavailable.')));
+                                    }
+                                  }
+                                }
+                              } catch (e) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to fetch course details.')));
+                              }
                             }
                           },
                         ),
