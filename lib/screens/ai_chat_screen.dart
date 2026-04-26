@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_markdown/flutter_markdown.dart'; // NEW: Renders beautiful formatting
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
-import 'catalog_screen.dart'; // NEW: Required for deep linking
-import 'item_details_screen.dart'; // NEW: Required for deep linking
+import 'catalog_screen.dart';
+import 'item_details_screen.dart';
 
 class ChatMessage {
   final String text;
@@ -117,7 +117,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scrollToBottom();
 
     try {
-      // FIX: Added 70-second explicit timeout for long "Help me" queries
       final response = await http.post(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=chat'),
         body: {
@@ -125,7 +124,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
         },
-      ).timeout(const Duration(seconds: 70));
+      ).timeout(const Duration(seconds: 95));
 
       if (response.statusCode == 200) {
         try {
@@ -141,23 +140,26 @@ class _AiChatScreenState extends State<AiChatScreen> {
               _loadSessions(); 
             }
           } else {
-            throw Exception(data['message']);
+            throw Exception(data['message'] ?? 'Unknown Error');
           }
-        } catch (e) {
-          throw Exception("Invalid server response format");
+        } on FormatException {
+          // Captures the raw crash text instead of hiding it!
+          String rawResponse = response.body;
+          if (rawResponse.length > 150) rawResponse = rawResponse.substring(0, 150) + '...';
+          throw Exception("Server printed text instead of JSON: $rawResponse");
         }
       } else {
-        throw Exception("Server Error: ${response.statusCode}");
+        throw Exception("HTTP Error: ${response.statusCode}");
       }
     } on TimeoutException {
       setState(() {
-        _messages.add(ChatMessage(text: "Kaida AI is taking a moment to think. Please check your chat history shortly.", isUser: false));
+        _messages.add(ChatMessage(text: "Kaida AI needs more time to think. Please check your history shortly.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
     } catch (e) {
       setState(() {
-        _messages.add(ChatMessage(text: "Network error. Please try again. Details: ${e.toString()}", isUser: false));
+        _messages.add(ChatMessage(text: "Network error. Details: ${e.toString()}", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
@@ -363,7 +365,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
                     ]
                   ),
-                  // FIX: Implementing MarkdownBody for beautiful formatting and course deep-linking
                   child: message.isUser
                       ? Text(message.text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4))
                       : MarkdownBody(
@@ -381,8 +382,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                             if (href != null && href.startsWith('kaida://course/')) {
                               final slug = href.replaceAll('kaida://course/', '');
                               
-                              // Create a structural dummy item containing the slug.
-                              // ItemDetailsScreen._fetchExtraDetails automatically fetches all missing data based on this slug!
                               final linkedItem = CatalogItem(
                                 id: 0, slug: slug, title: text ?? 'Course Details', thumbnailUrl: '',
                                 instructorName: 'Loading...', price: 0, discountPrice: 0, isFree: false,
