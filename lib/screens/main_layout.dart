@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import 'home_screen.dart';
 import 'catalog_screen.dart';
-import 'my_courses_screen.dart';
+import 'ai_chat_screen.dart'; // YOUR actual AI screen
+import 'my_courses_screen.dart'; // The Learn screen
 import 'profile_screen.dart';
 
 class MainLayout extends StatefulWidget {
@@ -16,10 +17,12 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   late int _currentIndex;
 
+  // The 5 Screens mapped exactly to your layout
   final List<Widget> _screens = [
     const HomeScreen(),
-    const CatalogScreen(actionType: 'courses', title: 'Explore'),
-    const MyCoursesScreen(),
+    const CatalogScreen(actionType: 'courses', title: 'All Courses'),
+    const AiChatScreen(), // Assuming the class name inside your file is AiChatScreen
+    const MyCoursesScreen(), 
     const ProfileScreen(),
   ];
 
@@ -54,11 +57,11 @@ class _MainLayoutState extends State<MainLayout> {
           backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.white,
           selectedItemColor: AppTheme.primaryColor,
           unselectedItemColor: Colors.grey.shade400,
-          type: BottomNavigationBarType.fixed,
+          type: BottomNavigationBarType.fixed, 
           showSelectedLabels: true,
           showUnselectedLabels: true,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10),
           elevation: 0,
           items: const [
             BottomNavigationBarItem(
@@ -67,14 +70,19 @@ class _MainLayoutState extends State<MainLayout> {
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.search_rounded)),
-              activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.search_rounded, size: 26)),
-              label: 'Explore',
+              icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.menu_book_rounded)),
+              activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.menu_book_rounded, size: 26)),
+              label: 'Courses',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.auto_awesome_rounded)),
+              activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.auto_awesome_rounded, size: 26)),
+              label: 'AI',
             ),
             BottomNavigationBarItem(
               icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.play_circle_fill_rounded)),
               activeIcon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.play_circle_fill_rounded, size: 26)),
-              label: 'My Learning',
+              label: 'Learn',
             ),
             BottomNavigationBarItem(
               icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.person_rounded)),
