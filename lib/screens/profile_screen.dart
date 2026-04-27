@@ -44,7 +44,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     if (mounted) {
       setState(() {
-        // Fix: Properly fallback to 'name' or 'full_name' so it doesn't default to Kaida Student
         _name = prefs.getString('full_name') ?? prefs.getString('name') ?? prefs.getString('username') ?? 'Loading...';
         _email = prefs.getString('email') ?? '';
         _role = prefs.getString('role') ?? 'student';
@@ -92,7 +91,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // RESTORED: Native Image Picker & Uploader
   Future<void> _pickAndUploadImage() async {
     try {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
@@ -118,7 +116,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // RESTORED: Secure Change Password Dialog
   void _showChangePasswordDialog() {
     final oldPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -217,7 +214,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // RESTORED: Native Share Functionality
   void _shareApp() {
     Share.share("$_shareMessage \n\n$_shareUrl");
   }
@@ -306,15 +302,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
                 
-                // 1. Avatar & Info Section
                 Center(
                   child: Column(
                     children: [
                       GestureDetector(
-                        onTap: _pickAndUploadImage, // TRIGGER NATIVE GALLERY
+                        onTap: _pickAndUploadImage,
                         child: Stack(
                           alignment: Alignment.bottomRight,
                           children: [
@@ -339,7 +335,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 4),
                       Text(_email, style: TextStyle(fontSize: 15, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
                       
-                      // 2. Affiliate / Instructor Role Badge
                       if (_role != 'student')
                         Container(
                           margin: const EdgeInsets.only(top: 8),
@@ -359,43 +354,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 
                 const SizedBox(height: 40),
+
+                // RESTORED: Affiliate/Instructor conditional menus
+                if (_role == 'instructor' || _role == 'admin') ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+                    child: Text('INSTRUCTOR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+                  _buildOptionTile(icon: Icons.dashboard_customize_rounded, title: 'Instructor Dashboard', isDark: isDark, onTap: () {}),
+                  _buildOptionTile(icon: Icons.video_library_rounded, title: 'Manage Courses', isDark: isDark, onTap: () {}),
+                  const SizedBox(height: 10),
+                ],
+
+                if (_role == 'affiliate' || _role == 'admin') ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+                    child: Text('AFFILIATE', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+                  _buildOptionTile(icon: Icons.campaign_rounded, title: 'Affiliate Dashboard', isDark: isDark, onTap: () {}),
+                  _buildOptionTile(icon: Icons.group_rounded, title: 'My Referrals', isDark: isDark, onTap: () {}),
+                  const SizedBox(height: 10),
+                ],
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+                  child: Text('GENERAL', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                ),
+
+                _buildOptionTile(icon: Icons.person_rounded, title: 'Edit Profile', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.account_balance_wallet_rounded, title: 'Kaida Tokens', isDark: isDark, trailing: Text(_walletBalance, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 16)), onTap: () {}),
+                _buildOptionTile(icon: Icons.favorite_rounded, title: 'My Wishlist', isDark: isDark, onTap: () {}),
                 
-                // 3. Option Tiles with strict Solid Rounded Icons
-                _buildOptionTile(
-                  icon: Icons.person_rounded,
-                  title: 'Edit Profile',
-                  isDark: isDark,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Edit Profile coming soon!')));
-                  },
-                ),
-                _buildOptionTile(
-                  icon: Icons.account_balance_wallet_rounded,
-                  title: 'Kaida Tokens',
-                  isDark: isDark,
-                  trailing: Text(_walletBalance, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 16)), // NO NAIRA SIGN
-                  onTap: () {},
-                ),
-                _buildOptionTile(
-                  icon: Icons.favorite_rounded, // MY WISHLIST
-                  title: 'My Wishlist',
-                  isDark: isDark,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wishlist coming soon!')));
-                  },
-                ),
-                _buildOptionTile(
-                  icon: Icons.notifications_rounded,
-                  title: 'Notifications',
-                  isDark: isDark,
-                  onTap: () {},
-                ),
-                _buildOptionTile(
-                  icon: Icons.security_rounded, // SECURITY TILE
-                  title: 'Security',
-                  isDark: isDark,
-                  onTap: _showChangePasswordDialog, // CHANGE PASSWORD TRIGGER
-                ),
+                // RESTORED: Moved Shop & Saved from bottom nav to Profile
+                _buildOptionTile(icon: Icons.store_rounded, title: 'Digital Shop', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.bookmark_rounded, title: 'Saved Downloads', isDark: isDark, onTap: () {}),
+
+                _buildOptionTile(icon: Icons.notifications_rounded, title: 'Notifications', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.security_rounded, title: 'Security', isDark: isDark, onTap: _showChangePasswordDialog),
                 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10),
@@ -417,12 +412,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () {},
                 ),
                 
-                _buildOptionTile(
-                  icon: Icons.share_rounded, // SHARE APP RESTORED
-                  title: 'Share App',
-                  isDark: isDark,
-                  onTap: _shareApp,
-                ),
+                _buildOptionTile(icon: Icons.share_rounded, title: 'Share App', isDark: isDark, onTap: _shareApp),
 
                 _buildOptionTile(
                   icon: Icons.dark_mode_rounded,
@@ -431,32 +421,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   trailing: Switch(
                     value: isDark,
                     activeColor: AppTheme.primaryColor,
-                    onChanged: (value) {
-                      themeProvider.toggleTheme(value);
-                    },
+                    onChanged: (value) => themeProvider.toggleTheme(value),
                   ),
-                  onTap: () {
-                    themeProvider.toggleTheme(!isDark);
-                  },
+                  onTap: () => themeProvider.toggleTheme(!isDark),
                 ),
                 
-                _buildOptionTile(
-                  icon: Icons.help_rounded,
-                  title: 'Help Center',
-                  isDark: isDark,
-                  onTap: () {},
-                ),
+                _buildOptionTile(icon: Icons.help_rounded, title: 'Help Center', isDark: isDark, onTap: () {}),
                 
                 const SizedBox(height: 10),
-                
-                _buildOptionTile(
-                  icon: Icons.logout_rounded,
-                  title: 'Log Out',
-                  isDark: isDark,
-                  isLogout: true,
-                  trailing: const SizedBox(),
-                  onTap: _handleLogout,
-                ),
+                _buildOptionTile(icon: Icons.logout_rounded, title: 'Log Out', isDark: isDark, isLogout: true, trailing: const SizedBox(), onTap: _handleLogout),
                 const SizedBox(height: 40),
               ],
             ),

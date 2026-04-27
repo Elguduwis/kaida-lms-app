@@ -10,6 +10,13 @@ class InstructorProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    // Safely parse the avatar URL
+    String? rawAvatar = instructor['avatar_url'];
+    String? safeAvatar;
+    if (rawAvatar != null && rawAvatar.isNotEmpty) {
+      safeAvatar = rawAvatar.startsWith('http') ? rawAvatar : 'https://academy.kainuwa.africa/$rawAvatar';
+    }
+
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       appBar: AppBar(
@@ -27,8 +34,8 @@ class InstructorProfileScreen extends StatelessWidget {
             CircleAvatar(
               radius: 60,
               backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-              backgroundImage: instructor['avatar'] != null ? NetworkImage(instructor['avatar']) : null,
-              child: instructor['avatar'] == null ? const Icon(Icons.person_rounded, size: 60, color: AppTheme.primaryColor) : null,
+              backgroundImage: safeAvatar != null ? NetworkImage(safeAvatar) : null,
+              child: safeAvatar == null ? const Icon(Icons.person_rounded, size: 60, color: AppTheme.primaryColor) : null,
             ),
             const SizedBox(height: 16),
             Text(instructor['name'] ?? 'Instructor', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),

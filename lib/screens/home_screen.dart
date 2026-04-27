@@ -286,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      child: Row(
+      child: Row(mainAxisAlignment: MainAxisAlignment.center,
         children: [
           CircleAvatar(
             radius: 24,
@@ -347,8 +347,8 @@ class _HomeScreenState extends State<HomeScreen> {
         // Bottom Left Animated Dots
         Positioned(
           bottom: 12,
-          left: 36,
-          child: Row(
+          left: 0, right: 0,
+          child: Row(mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
               _banners.length,
               (index) => AnimatedContainer(
@@ -383,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          child: Row(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -430,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          child: Row(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -558,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
