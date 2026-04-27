@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
 import 'catalog_screen.dart';
+import 'course_player_screen.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final CatalogItem item;
@@ -20,9 +24,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   bool _isLoading = true;
   bool _isEnrolled = false;
   bool _isWishlisted = false;
+  int? _userId;
   Map<String, dynamic>? _details;
   
   late TabController _tabController;
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
 
   @override
   void initState() {
@@ -34,15 +41,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   @override
   void dispose() {
     _tabController.dispose();
+    _videoController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
   Future<void> _fetchDetails() async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
+    _userId = prefs.getInt('user_id');
 
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/course_details.php?slug=${widget.item.slug}&user_id=${userId ?? 0}'));
+      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/course_details.php?slug=${widget.item.slug}&user_id=${_userId ?? 0}'));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -54,6 +63,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               _isWishlisted = data['data']['is_wishlisted'] == true;
               _isLoading = false;
             });
+            _initializeVideoPlayer();
           }
         }
       }
@@ -62,11 +72,61 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
+  // RESTORED: Video Player Initialization
+  void _initializeVideoPlayer() {
+    String introUrl = _details?['course']?['intro_video_url']?.toString() ?? '';
+    if (introUrl.isNotEmpty) {
+      if (!introUrl.startsWith('http')) introUrl = 'https://academy.kainuwa.africa/' + introUrl;
+
+      _videoController = VideoPlayerController.network(introUrl)
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {
+              _chewieController = ChewieController(
+                videoPlayerController: _videoController!,
+                autoPlay: true,
+                looping: false,
+                aspectRatio: _videoController!.value.aspectRatio,
+                materialProgressColors: ChewieProgressColors(
+                  playedColor: AppTheme.primaryColor,
+                  handleColor: AppTheme.primaryColor,
+                  backgroundColor: Colors.grey,
+                ),
+              );
+            });
+          }
+        });
+    }
+  }
+
+  // NEW: Open Video Modal
+  void _showVideoDialog() {
+    if (_chewieController == null) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video is still loading or unavailable.')));
+       return;
+    }
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: _videoController!.value.aspectRatio,
+            child: Chewie(controller: _chewieController!),
+          ),
+        ),
+      ),
+    ).then((_) {
+      // Pause video when modal is closed
+      _videoController?.pause();
+    });
+  }
+
   Future<void> _toggleWishlist() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getInt('user_id');
-    
-    if (userId == null) {
+    if (_userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save courses.')));
       return;
     }
@@ -76,32 +136,45 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.toggleWishlist),
-        body: {'user_id': userId.toString(), 'item_id': widget.item.id.toString(), 'item_type': 'course'}
+        body: {'user_id': _userId.toString(), 'item_id': widget.item.id.toString(), 'item_type': 'course'}
       );
       final data = json.decode(response.body);
       
       if (data['status'] != 'success') {
-        setState(() => _isWishlisted = !_isWishlisted); // Revert
+        setState(() => _isWishlisted = !_isWishlisted); 
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Failed to update wishlist')));
       }
     } catch (e) {
-      setState(() => _isWishlisted = !_isWishlisted); // Revert
+      setState(() => _isWishlisted = !_isWishlisted); 
     }
   }
 
-  void _handleEnroll() {
-    if (widget.item.isComingSoon) return;
-    
-    if (_isEnrolled) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Redirecting to Course Player...')));
-      // Future: Navigator.push(context, MaterialPageRoute(builder: (_) => CoursePlayerScreen(slug: widget.item.slug)));
+  // RESTORED: Working Enrollment & Webview Logic
+  void _handlePrimaryAction() {
+    if (_userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first.')));
+      return;
+    }
+
+    if (_isEnrolled && widget.item.type == 'courses') {
+      Navigator.push(context, MaterialPageRoute(
+        builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)
+      ));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing Enrollment...')));
-      // Future: Connect to Paystack/Flutterwave or enroll free course API
+      String targetPath = widget.item.type == 'courses'
+          ? '/enroll.php?course_id=${widget.item.id}'
+          : '/view_product.php?slug=${widget.item.slug}';
+
+      String encodedRedirect = Uri.encodeComponent(targetPath);
+      String authBridgeUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$encodedRedirect';
+
+      Navigator.push(context, MaterialPageRoute(builder: (context) => CheckoutWebViewScreen(
+        title: widget.item.type == 'courses' ? 'Enroll Course' : 'Buy Product',
+        url: authBridgeUrl,
+      )));
     }
   }
 
-  // FIX: Stat cards now have a strict fixed height and FittedBox to prevent breaking
   Widget _buildStatCard(IconData icon, String value, String label, bool isDark) {
     return Container(
       height: 90, 
@@ -157,7 +230,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // FIX: Premium Nested Header Layout matching Figma exactly
                             SafeArea(
                               bottom: false,
                               child: Padding(
@@ -182,7 +254,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                               ),
                             ),
                             
-                            // FIX: Thumbnail Nested in Div with Rounded Corners
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 20),
                               child: Stack(
@@ -199,24 +270,25 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                           fit: BoxFit.cover,
                                         ),
                                       ),
-                                      // FIX: Video Play Button Overlay
                                       child: _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty
-                                          ? Center(
-                                              child: Container(
-                                                padding: const EdgeInsets.all(14),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white.withOpacity(0.8),
-                                                  shape: BoxShape.circle,
-                                                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)],
+                                          ? GestureDetector(
+                                              onTap: _showVideoDialog, // OPEN VIDEO MODAL
+                                              child: Center(
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(14),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withOpacity(0.8),
+                                                    shape: BoxShape.circle,
+                                                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)],
+                                                  ),
+                                                  child: const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
                                                 ),
-                                                child: const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
                                               ),
                                             )
                                           : null,
                                     ),
                                   ),
                                   
-                                  // Floating Price Badge
                                   Positioned(
                                     bottom: -16,
                                     right: 16,
@@ -236,7 +308,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                             
                             const SizedBox(height: 32),
                             
-                            // Info Section
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 20),
                               child: Column(
@@ -261,7 +332,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   
                                   const SizedBox(height: 24),
                                   
-                                  // FIX: Guaranteed Equal Sized Cards
                                   Row(
                                     children: [
                                       Expanded(child: _buildStatCard(Icons.people_alt_rounded, _details?['student_count']?.toString() ?? '0', 'Students', isDark)),
@@ -314,7 +384,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                   ),
                 ),
                 
-                // Bottom Fixed Enroll Button
                 Positioned(
                   bottom: 0, left: 0, right: 0,
                   child: Container(
@@ -328,10 +397,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                       child: SizedBox(
                         height: 54,
                         child: ElevatedButton(
-                          // FIX: Attached Enroll Action
-                          onPressed: widget.item.isComingSoon ? null : _handleEnroll,
+                          onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction, // RESTORED ACTION
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryColor,
+                            backgroundColor: widget.item.isComingSoon ? Colors.grey : AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                             elevation: 0,
                           ),
@@ -381,9 +449,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   Widget _buildLessonsTab(bool isDark) {
     List<dynamic> lessons = [];
     if (_details?['items_by_section'] != null) {
-      _details!['items_by_section'].forEach((key, value) {
-        lessons.addAll(value);
-      });
+      if (_details!['items_by_section'] is Map) {
+        _details!['items_by_section'].forEach((key, value) {
+          lessons.addAll(value);
+        });
+      }
     }
 
     if (lessons.isEmpty) {
@@ -564,5 +634,105 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
     return false;
+  }
+}
+
+// RESTORED: Working WebView Screen for Enrollment
+class CheckoutWebViewScreen extends StatefulWidget {
+  final String title;
+  final String url;
+  const CheckoutWebViewScreen({Key? key, required this.title, required this.url}) : super(key: key);
+
+  @override
+  _CheckoutWebViewScreenState createState() => _CheckoutWebViewScreenState();
+}
+
+class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+  bool _hasError = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(AppTheme.backgroundColor)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) { 
+            if (mounted) setState(() { _isLoading = true; _hasError = false; }); 
+          },
+          onPageFinished: (String url) { 
+            if (mounted) setState(() => _isLoading = false); 
+          },
+          onWebResourceError: (WebResourceError error) {
+            if (mounted) setState(() { _isLoading = false; _hasError = true; });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  Future<bool> _goBack() async {
+    if (await _controller.canGoBack()) {
+      _controller.goBack();
+      return Future.value(false);
+    }
+    return Future.value(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: _goBack,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
+          iconTheme: const IconThemeData(color: Colors.white),
+          backgroundColor: AppTheme.primaryColor,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh), 
+              onPressed: () {
+                setState(() { _hasError = false; _isLoading = true; });
+                _controller.reload();
+              }
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            if (_hasError)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    const Text('Please check your internet connection.', style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                      onPressed: () {
+                        setState(() { _hasError = false; _isLoading = true; });
+                        _controller.reload();
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      label: const Text('Try Again', style: TextStyle(color: Colors.white)),
+                    )
+                  ],
+                ),
+              )
+            else
+              WebViewWidget(controller: _controller),
+              
+            if (_isLoading && !_hasError) const Center(child: KaidaLoader()),
+          ],
+        ),
+      ),
+    );
   }
 }
