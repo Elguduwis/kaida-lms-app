@@ -5,11 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../config/theme_provider.dart';
 import '../widgets/kaida_loader.dart';
 import 'login_screen.dart';
+import 'catalog_screen.dart';
+import 'downloads_screen.dart';
+import 'security_screen.dart';
+import 'wishlist_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -116,104 +121,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _showChangePasswordDialog() {
-    final oldPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    bool isSubmitting = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.bold)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: oldPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Current Password',
-                      prefixIcon: const Icon(Icons.lock_rounded, color: AppTheme.primaryColor),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: newPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: const Icon(Icons.lock_reset_rounded, color: AppTheme.primaryColor),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: confirmPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: const Icon(Icons.lock_reset_rounded, color: AppTheme.primaryColor),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
-                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-              ),
-              isSubmitting 
-                ? const Padding(padding: EdgeInsets.all(8.0), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                : ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-                    onPressed: () async {
-                      if (newPasswordController.text != confirmPasswordController.text) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New passwords do not match')));
-                        return;
-                      }
-                      setStateDialog(() => isSubmitting = true);
-                      
-                      try {
-                        final response = await http.post(
-                          Uri.parse(ApiConfig.changePassword),
-                          body: {
-                            'user_id': _userId.toString(),
-                            'old_password': oldPasswordController.text,
-                            'new_password': newPasswordController.text,
-                          }
-                        );
-                        final data = json.decode(response.body);
-                        Navigator.pop(context);
-                        if (data['status'] == 'success') {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password changed successfully!'), backgroundColor: Colors.green));
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Failed to change password'), backgroundColor: Colors.red));
-                        }
-                      } catch (e) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection error'), backgroundColor: Colors.red));
-                      }
-                    },
-                    child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-            ],
-          );
-        }
-      )
-    );
-  }
-
   void _shareApp() {
     Share.share("$_shareMessage \n\n$_shareUrl");
   }
@@ -317,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             CircleAvatar(
                               radius: 50,
                               backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                              backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                              backgroundImage: _avatarUrl != null ? CachedNetworkImageProvider(_avatarUrl!) : null,
                               child: _avatarUrl == null 
                                   ? const Icon(Icons.person_rounded, size: 50, color: AppTheme.primaryColor) 
                                   : null,
@@ -355,7 +262,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 
                 const SizedBox(height: 40),
 
-                // RESTORED: Affiliate/Instructor conditional menus
                 if (_role == 'instructor' || _role == 'admin') ...[
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
@@ -383,14 +289,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 _buildOptionTile(icon: Icons.person_rounded, title: 'Edit Profile', isDark: isDark, onTap: () {}),
                 _buildOptionTile(icon: Icons.account_balance_wallet_rounded, title: 'Kaida Tokens', isDark: isDark, trailing: Text(_walletBalance, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 16)), onTap: () {}),
-                _buildOptionTile(icon: Icons.favorite_rounded, title: 'My Wishlist', isDark: isDark, onTap: () {}),
                 
-                // RESTORED: Moved Shop & Saved from bottom nav to Profile
-                _buildOptionTile(icon: Icons.store_rounded, title: 'Digital Shop', isDark: isDark, onTap: () {}),
-                _buildOptionTile(icon: Icons.bookmark_rounded, title: 'Saved Downloads', isDark: isDark, onTap: () {}),
+                // ROUTED: Wishlist
+                _buildOptionTile(icon: Icons.favorite_rounded, title: 'My Wishlist', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistScreen()));
+                }),
+                
+                // ROUTED: Digital Shop
+                _buildOptionTile(icon: Icons.store_rounded, title: 'Digital Shop', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogScreen(actionType: 'products', title: 'Shop Products')));
+                }),
+                
+                // ROUTED: Saved Downloads
+                _buildOptionTile(icon: Icons.bookmark_rounded, title: 'Saved Downloads', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsScreen()));
+                }),
 
                 _buildOptionTile(icon: Icons.notifications_rounded, title: 'Notifications', isDark: isDark, onTap: () {}),
-                _buildOptionTile(icon: Icons.security_rounded, title: 'Security', isDark: isDark, onTap: _showChangePasswordDialog),
+                
+                // ROUTED: Security Screen
+                _buildOptionTile(icon: Icons.security_rounded, title: 'Security', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityScreen()));
+                }),
                 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10),
