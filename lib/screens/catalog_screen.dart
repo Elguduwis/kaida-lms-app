@@ -8,7 +8,6 @@ import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
 import 'item_details_screen.dart';
 
-// FIX: Added missing type, slug, and isComingSoon properties expected by ItemDetailsScreen
 class CatalogItem {
   final int id;
   final String title;
@@ -175,7 +174,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
           if (mounted) {
             setState(() {
               _allItems = parsedList;
-              _filteredItems = parsedList;
+              _filterResults(); // Call filter to apply the initial sort
               _isLoading = false;
             });
           }
@@ -195,6 +194,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
         bool matchesPrice = item.price >= _priceRange.start && item.price <= _priceRange.end;
         return matchesSearch && matchesCategory && matchesPrice;
       }).toList();
+      
+      // FIX: Available courses at the top, coming soon below
+      _filteredItems.sort((a, b) {
+        if (a.isComingSoon == b.isComingSoon) return 0;
+        return a.isComingSoon ? 1 : -1;
+      });
     });
   }
 
