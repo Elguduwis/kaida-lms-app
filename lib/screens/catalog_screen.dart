@@ -1,4 +1,3 @@
-import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -6,66 +5,55 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
+import '../widgets/kaida_loader.dart';
 import 'item_details_screen.dart';
 
+// CatalogItem Model defined here so it can be used by Home and Catalog screens
 class CatalogItem {
   final int id;
-  final String slug;
   final String title;
   final String thumbnailUrl;
-  final String instructorName;
   final double price;
   final double discountPrice;
   final bool isFree;
-  final String type; 
+  final String instructorName;
   final String categoryName;
-  final String productType;
-  final DateTime? releaseDate;
   final String language;
+  final String itemType;
 
   CatalogItem({
-    required this.id, required this.slug, required this.title, required this.thumbnailUrl,
-    required this.instructorName, required this.price, required this.discountPrice,
-    required this.isFree, required this.type, required this.categoryName,
-    this.productType = '', this.releaseDate, required this.language,
+    required this.id,
+    required this.title,
+    required this.thumbnailUrl,
+    required this.price,
+    required this.discountPrice,
+    required this.isFree,
+    required this.instructorName,
+    required this.categoryName,
+    required this.language,
+    required this.itemType,
   });
 
-  bool get isComingSoon {
-    if (releaseDate == null) return false;
-    return releaseDate!.isAfter(DateTime.now());
-  }
-
-  factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
-    String rawThumb = json['thumbnail_url']?.toString() ?? '';
-    if (rawThumb.isNotEmpty && !rawThumb.startsWith('http')) {
-      rawThumb = 'https://academy.kainuwa.africa/$rawThumb';
-    }
-    
-    DateTime? parsedDate;
-    if (json['release_date'] != null) {
-      parsedDate = DateTime.tryParse(json['release_date'].toString());
-    }
-
+  factory CatalogItem.fromJson(Map<String, dynamic> json, String type) {
     return CatalogItem(
       id: int.tryParse(json['id'].toString()) ?? 0,
-      slug: json['slug']?.toString() ?? '',
-      title: json['title']?.toString() ?? 'Untitled',
-      thumbnailUrl: rawThumb,
-      instructorName: json['instructor_name']?.toString() ?? json['username']?.toString() ?? 'Kaida Learn',
-      price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
-      discountPrice: double.tryParse(json['discount_price']?.toString() ?? '0') ?? 0.0,
-      isFree: (json['is_free']?.toString() == '1'),
-      type: itemType,
-      categoryName: json['category_name']?.toString() ?? 'General',
-      productType: json['product_type']?.toString() ?? '',
-      releaseDate: parsedDate,
-      language: json['language']?.toString() ?? 'Hausa',
+      title: json['title'] ?? 'Untitled',
+      thumbnailUrl: json['thumbnail_url'] != null && json['thumbnail_url'].toString().isNotEmpty
+          ? (json['thumbnail_url'].toString().startsWith('http') ? json['thumbnail_url'] : 'https://academy.kainuwa.africa/${json['thumbnail_url']}')
+          : '',
+      price: double.tryParse(json['price'].toString()) ?? 0.0,
+      discountPrice: double.tryParse(json['discount_price'].toString()) ?? 0.0,
+      isFree: json['is_free'] == 1 || json['is_free'] == true || json['is_free'] == '1',
+      instructorName: json['instructor_name'] ?? json['author_name'] ?? 'Kaida Instructor',
+      categoryName: json['category_name'] ?? 'General',
+      language: json['language'] ?? 'EN',
+      itemType: type,
     );
   }
 }
 
 class CatalogScreen extends StatefulWidget {
-  final String actionType; 
+  final String actionType;
   final String title;
 
   const CatalogScreen({Key? key, required this.actionType, required this.title}) : super(key: key);
@@ -78,79 +66,108 @@ class _CatalogScreenState extends State<CatalogScreen> {
   bool _isLoading = true;
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
-  Set<int> _wishlistedIds = {};
+  Set<int> _wishlistedCourseIds = {};
   
-  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  // Filter State
   String _selectedCategory = 'All';
-  List<String> _categories = ['All'];
+  String _selectedLevel = 'All';
+  RangeValues _priceRange = const RangeValues(0, 50000);
 
   @override
   void initState() {
     super.initState();
     _fetchWishlist();
-    _fetchData();
+    _fetchCatalog();
+    _searchController.addListener(_filterResults);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchWishlist() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     if (userId == null) return;
-
-    final cachedWishlist = prefs.getString('cached_wishlist_${widget.actionType}');
-    if (cachedWishlist != null) {
-      List<dynamic> list = json.decode(cachedWishlist);
-      if (mounted) {
-        setState(() {
-          _wishlistedIds = list.map((e) => int.parse(e.toString())).toSet();
-        });
+    try {
+      final response = await http.post(Uri.parse(ApiConfig.getWishlist), body: {'user_id': userId.toString()});
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && mounted) {
+          setState(() {
+            _wishlistedCourseIds = (data['data'] as List)
+                .where((item) => item['item_type'] == 'course')
+                .map<int>((item) => int.tryParse(item['item_id'].toString()) ?? 0)
+                .toSet();
+          });
+        }
       }
+    } catch (e) {}
+  }
+
+  Future<void> _toggleWishlist(int courseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save courses.')));
+      return;
     }
+
+    final isCurrentlyWishlisted = _wishlistedCourseIds.contains(courseId);
+    
+    setState(() {
+      if (isCurrentlyWishlisted) _wishlistedCourseIds.remove(courseId);
+      else _wishlistedCourseIds.add(courseId);
+    });
 
     try {
       final response = await http.post(
-        Uri.parse(ApiConfig.getWishlist),
-        body: {'user_id': userId.toString()},
+        Uri.parse(ApiConfig.toggleWishlist),
+        body: {'user_id': userId.toString(), 'item_id': courseId.toString(), 'item_type': 'course'}
       );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          List<dynamic> items = data['data'];
-          Set<int> syncedIds = {};
-          String expectedType = widget.actionType == 'courses' ? 'course' : 'product';
-          
-          for (var item in items) {
-            if (item['item_type'] == expectedType) {
-              syncedIds.add(int.parse(item['item_id'].toString()));
-            }
-          }
-          if (mounted) {
-            setState(() => _wishlistedIds = syncedIds);
-            prefs.setString('cached_wishlist_${widget.actionType}', json.encode(syncedIds.toList()));
-          }
-        }
+      final data = json.decode(response.body);
+      
+      if (data['status'] != 'success') {
+        setState(() {
+          if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
+          else _wishlistedCourseIds.remove(courseId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Action failed.')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message']), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
       }
     } catch (e) {
-      debugPrint("Wishlist offline sync - using cache");
+      setState(() {
+        if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
+        else _wishlistedCourseIds.remove(courseId);
+      });
     }
   }
 
-  Future<void> _fetchData() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // 1. INSTANT OFFLINE LOAD
-    final cachedData = prefs.getString('cached_catalog_${widget.actionType}');
-    if (cachedData != null) {
-      _processDataPayload(json.decode(cachedData));
-    }
-
-    // 2. BACKGROUND SYNC
+  Future<void> _fetchCatalog() async {
     try {
-      final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=${widget.actionType}'));
+      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/catalog.php?action=${widget.actionType}'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success') {
-          prefs.setString('cached_catalog_${widget.actionType}', json.encode(data['data']));
-          _processDataPayload(data['data']);
+          List<dynamic> list = data['data'];
+          List<CatalogItem> parsedList = [];
+          for (var item in list) {
+            try {
+              parsedList.add(CatalogItem.fromJson(item, widget.actionType.contains('products') ? 'product' : 'course'));
+            } catch (e) {}
+          }
+          if (mounted) {
+            setState(() {
+              _allItems = parsedList;
+              _filteredItems = parsedList;
+              _isLoading = false;
+            });
+          }
         }
       }
     } catch (e) {
@@ -158,77 +175,158 @@ class _CatalogScreenState extends State<CatalogScreen> {
     }
   }
 
-  void _processDataPayload(List<dynamic> list) {
-    List<CatalogItem> parsedItems = [];
-    Set<String> uniqueCategories = {'All'};
-
-    for (var item in list) {
-      try {
-        final parsed = CatalogItem.fromJson(item, widget.actionType);
-        parsedItems.add(parsed);
-        if (parsed.categoryName.isNotEmpty && parsed.categoryName != 'General') {
-          uniqueCategories.add(parsed.categoryName);
-        }
-      } catch (e) {
-        debugPrint("Parse error: $e");
-      }
-    }
-
-    parsedItems.sort((a, b) {
-      if (a.isComingSoon && !b.isComingSoon) return 1;
-      if (!a.isComingSoon && b.isComingSoon) return -1;
-      return 0;
-    });
-
-    if (mounted) {
-      setState(() {
-        _allItems = parsedItems;
-        _filteredItems = parsedItems;
-        _categories = uniqueCategories.toList();
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _filterItems() {
+  void _filterResults() {
+    String query = _searchController.text.toLowerCase();
     setState(() {
       _filteredItems = _allItems.where((item) {
-        final matchesSearch = item.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                              item.instructorName.toLowerCase().contains(_searchQuery.toLowerCase());
-        final matchesCategory = _selectedCategory == 'All' || item.categoryName == _selectedCategory;
-        return matchesSearch && matchesCategory;
+        bool matchesSearch = item.title.toLowerCase().contains(query) || item.categoryName.toLowerCase().contains(query);
+        bool matchesCategory = _selectedCategory == 'All' || item.categoryName == _selectedCategory;
+        bool matchesPrice = item.price >= _priceRange.start && item.price <= _priceRange.end;
+        return matchesSearch && matchesCategory && matchesPrice;
       }).toList();
     });
   }
 
-  Future<void> _toggleWishlist(CatalogItem item) async {
-    setState(() {
-      if (_wishlistedIds.contains(item.id)) {
-        _wishlistedIds.remove(item.id);
-      } else {
-        _wishlistedIds.add(item.id);
-      }
-    });
+  // --- ADVANCED FILTER MODAL UI ---
+  void _showFilterModal(bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
+                    const Text('Filter', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    TextButton(
+                      onPressed: () {
+                        setModalState(() {
+                          _selectedCategory = 'All';
+                          _selectedLevel = 'All';
+                          _priceRange = const RangeValues(0, 50000);
+                        });
+                        setState(() {
+                          _selectedCategory = 'All';
+                          _selectedLevel = 'All';
+                          _priceRange = const RangeValues(0, 50000);
+                          _filterResults();
+                        });
+                      },
+                      child: const Text('Reset', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Category', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: ['All', 'Design', 'Coding', 'Business', 'Marketing'].map((cat) {
+                            bool isSelected = _selectedCategory == cat;
+                            return ChoiceChip(
+                              label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
+                              selected: isSelected,
+                              selectedColor: AppTheme.primaryColor,
+                              backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
+                              onSelected: (val) => setModalState(() => _selectedCategory = cat),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? AppTheme.primaryColor : Colors.transparent)),
+                            );
+                          }).toList(),
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        const Text('Level', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: ['All', 'Beginner', 'Intermediate', 'Expert'].map((level) {
+                            bool isSelected = _selectedLevel == level;
+                            return ChoiceChip(
+                              label: Text(level, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
+                              selected: isSelected,
+                              selectedColor: AppTheme.primaryColor,
+                              backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
+                              onSelected: (val) => setModalState(() => _selectedLevel = level),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? AppTheme.primaryColor : Colors.transparent)),
+                            );
+                          }).toList(),
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        const Text('Price Range', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        RangeSlider(
+                          values: _priceRange,
+                          min: 0, max: 100000,
+                          activeColor: AppTheme.primaryColor,
+                          inactiveColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                          labels: RangeLabels('₦${_priceRange.start.round()}', '₦${_priceRange.end.round()}'),
+                          onChanged: (val) => setModalState(() => _priceRange = val),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('₦${_priceRange.start.round()}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                            Text('₦${_priceRange.end.round()}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
 
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString('cached_wishlist_${widget.actionType}', json.encode(_wishlistedIds.toList()));
-
-    final userId = prefs.getInt('user_id');
-    if (userId == null) return;
-
-    try {
-      await http.post(
-        Uri.parse('https://academy.kainuwa.africa/api/toggle_wishlist.php'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'user_id': userId,
-          'item_id': item.id,
-          'item_type': widget.actionType == 'courses' ? 'course' : 'product'
-        }),
-      );
-    } catch (e) {
-      debugPrint("Wishlist error: $e");
-    }
+                        const SizedBox(height: 24),
+                        const Text('Duration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: ['0-3 hours', '4-7 hours', '8-17 hours', '18+ hours'].map((dur) {
+                            return Chip(
+                              label: Text(dur, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.black)),
+                              backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      _filterResults();
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26))),
+                    child: const Text('Apply Filter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      ),
+    );
   }
 
   @override
@@ -236,235 +334,191 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            backgroundColor: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
-            elevation: 0,
-            pinned: true,
-            iconTheme: const IconThemeData(color: Colors.white),
-            title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
-            centerTitle: true,
-          ),
-          SliverToBoxAdapter(
-            child: Container(
-              color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-                ),
-                child: TextField(
-                  style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                  onChanged: (value) {
-                    _searchQuery = value;
-                    _filterItems();
-                  },
-                  decoration: InputDecoration(
-                    hintText: widget.actionType == 'courses' ? 'Search courses, mentors...' : 'Search products...',
-                    hintStyle: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade400),
-                    prefixIcon: const Icon(Icons.search, color: AppTheme.primaryColor),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        automaticallyImplyLeading: false, 
+        title: Text(widget.title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Modern Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                      decoration: InputDecoration(
+                        hintText: 'Search for courses...',
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
+                        prefixIcon: Icon(Icons.search_rounded, color: Colors.grey.shade500),
+                        suffixIcon: _searchController.text.isNotEmpty 
+                            ? IconButton(icon: Icon(Icons.close_rounded, color: Colors.grey.shade500), onPressed: () => _searchController.clear())
+                            : null,
+                        filled: true,
+                        fillColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _showFilterModal(isDark),
+                    child: Container(
+                      height: 48, width: 48,
+                      decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          if (!_isLoading && _categories.length > 1)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 16, bottom: 8), 
-                child: SizedBox(
-                  height: 40,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) {
-                      final category = _categories[index];
-                      final isSelected = _selectedCategory == category;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedCategory = category;
-                            _filterItems();
-                          });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          margin: const EdgeInsets.only(right: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.primaryColor : (isDark ? AppTheme.darkSurfaceColor : Colors.white),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isSelected ? AppTheme.primaryColor : (isDark ? Colors.grey.shade700 : Colors.grey.shade300)),
-                            boxShadow: isSelected ? [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
-                          ),
-                          child: Text(
-                            category,
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.grey.shade700),
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                            ),
-                          ),
+            
+            // Grid Content
+            Expanded(
+              child: _isLoading 
+                ? const Center(child: KaidaLoader())
+                : _filteredItems.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.shade400),
+                            const SizedBox(height: 16),
+                            Text('No courses found', style: TextStyle(fontSize: 18, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                          ],
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+                      )
+                    : RefreshIndicator(
+                        color: AppTheme.primaryColor,
+                        onRefresh: _fetchCatalog,
+                        child: GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2, // 2 CARDS PER ROW
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 16,
+                            mainAxisExtent: 260, // Fixed height to prevent overflow
+                          ),
+                          itemCount: _filteredItems.length,
+                          itemBuilder: (context, index) => _buildGridCard(_filteredItems[index], isDark),
+                        ),
+                      ),
             ),
-          if (_isLoading && _allItems.isEmpty)
-            const SliverFillRemaining(child: Center(child: KaidaLoader()))
-          else if (_filteredItems.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search_off, size: 80, color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
-                    const SizedBox(height: 16),
-                    Text('No results found.', style: TextStyle(fontSize: 18, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.70, 
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildModernCard(_filteredItems[index], isDark),
-                  childCount: _filteredItems.length,
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildModernCard(CatalogItem item, bool isDark) {
-    String subtitleText = widget.actionType == 'products' 
-        ? (item.productType == 'digital' ? 'Digital Download' : 'Physical Item')
-        : item.instructorName;
+  // --- EXACTLY MATCHES HOME SCREEN CARD STYLE BUT ADAPTED FOR GRID ---
+  Widget _buildGridCard(CatalogItem item, bool isDark) {
+    int discountPercent = 0;
+    if (item.price > 0 && item.discountPrice > 0 && item.discountPrice < item.price) {
+      discountPercent = (((item.price - item.discountPrice) / item.price) * 100).round();
+    }
+    
+    bool isWishlisted = _wishlistedCourseIds.contains(item.id);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.grey.withOpacity(0.12), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          if (!item.isComingSoon) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This item is launching soon!')));
-          }
-        },
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item))),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+          boxShadow: [BoxShadow(color: isDark ? Colors.black12 : Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              flex: 5,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  item.thumbnailUrl.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: item.thumbnailUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-                          errorWidget: (context, url, error) => Container(color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, color: Colors.white)),
-                        )
-                      : Container(color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, child: Icon(widget.actionType == 'courses' ? Icons.school : Icons.shopping_bag, size: 40, color: Colors.white)),
-                  
+            // Thumbnail Stack
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: item.thumbnailUrl.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
+                      : Container(height: 110, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
+                ),
+                if (discountPercent > 0)
                   Positioned(
                     top: 8, left: 8,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(6)),
-                          child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                        ),
-                        if (widget.actionType == 'courses') ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.language, size: 10, color: Colors.white),
-                                const SizedBox(width: 4),
-                                Text(item.language.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ),
-                        ]
-                      ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
+                      child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  Positioned(
-                    top: 8, right: 8,
-                    child: GestureDetector(
-                      onTap: () => _toggleWishlist(item),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: isDark ? Colors.grey.shade800 : Colors.white, shape: BoxShape.circle),
-                        child: Icon(
-                          _wishlistedIds.contains(item.id) ? Icons.favorite : Icons.favorite_border,
-                          color: _wishlistedIds.contains(item.id) ? Colors.red : (isDark ? Colors.grey.shade400 : Colors.grey),
-                          size: 16,
-                        ),
+                Positioned(
+                  top: 6, right: 6,
+                  child: GestureDetector(
+                    onTap: () => _toggleWishlist(item.id),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9), shape: BoxShape.circle),
+                      child: Icon(
+                        isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isWishlisted ? Colors.redAccent : Colors.grey.shade600,
+                        size: 16, // Slightly smaller for grid
                       ),
                     ),
                   ),
-                  if (item.isComingSoon)
-                    Container(
-                      color: Colors.black.withOpacity(0.6),
-                      child: const Center(child: Icon(Icons.lock_clock, color: Colors.white, size: 30)),
-                    )
-                ],
-              ),
+                ),
+              ],
             ),
+            
+            // Content Body
             Expanded(
-              flex: 5,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(item.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, height: 1.2, color: isDark ? Colors.white : Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(widget.actionType == 'courses' ? Icons.person : Icons.inventory_2, size: 12, color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
-                            const SizedBox(width: 4),
-                            Expanded(child: Text(subtitleText, style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                          ],
+                        Expanded(child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                          child: Text(item.language.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 8, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
-                    _buildPrice(item, isDark),
+                    const SizedBox(height: 4),
+                    Text(item.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_rounded, size: 12, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text(item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      ],
+                    ),
+                    const Spacer(),
+                    // Price Row
+                    if (item.isFree || (item.price == 0 && item.discountPrice == 0))
+                      const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
+                    else if (item.discountPrice > 0 && item.discountPrice < item.price)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppTheme.primaryColor)),
+                          const SizedBox(width: 4),
+                          Text('₦${item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w600)),
+                        ],
+                      )
+                    else
+                      Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppTheme.primaryColor)),
                   ],
                 ),
               ),
@@ -473,21 +527,5 @@ class _CatalogScreenState extends State<CatalogScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildPrice(CatalogItem item, bool isDark) {
-    if (item.isComingSoon) return const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12));
-    if (item.isFree || (item.price == 0 && item.discountPrice == 0)) return const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14));
-    
-    if (item.discountPrice > 0 && item.discountPrice < item.price) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('₦${item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: isDark ? Colors.grey.shade500 : Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w600)),
-          Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryColor)),
-        ],
-      );
-    }
-    return Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryColor));
   }
 }
