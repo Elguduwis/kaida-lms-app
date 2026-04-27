@@ -72,7 +72,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
-  // RESTORED: Video Player Initialization
   void _initializeVideoPlayer() {
     String introUrl = _details?['course']?['intro_video_url']?.toString() ?? '';
     if (introUrl.isNotEmpty) {
@@ -84,7 +83,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
             setState(() {
               _chewieController = ChewieController(
                 videoPlayerController: _videoController!,
-                autoPlay: true,
+                autoPlay: false, // FIX: Stops the video from playing audio secretly in the background
                 looping: false,
                 aspectRatio: _videoController!.value.aspectRatio,
                 materialProgressColors: ChewieProgressColors(
@@ -99,18 +98,21 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
-  // NEW: Open Video Modal
   void _showVideoDialog() {
     if (_chewieController == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video is still loading or unavailable.')));
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video is loading... please try again in a moment.')));
        return;
     }
+
+    // FIX: Only start playing the video when the pop-up actually opens
+    _videoController?.play(); 
+
     showDialog(
       context: context,
+      barrierColor: Colors.black.withOpacity(0.85), // FIX: Dims the background nicely
       builder: (context) => Dialog(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent, // FIX: Removes the ugly white box behind the video
         insetPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AspectRatio(
@@ -120,7 +122,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         ),
       ),
     ).then((_) {
-      // Pause video when modal is closed
+      // FIX: Pauses the video automatically if the user clicks out of the pop-up
       _videoController?.pause();
     });
   }
@@ -149,7 +151,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
-  // RESTORED: Working Enrollment & Webview Logic
   void _handlePrimaryAction() {
     if (_userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first.')));
@@ -397,7 +398,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                       child: SizedBox(
                         height: 54,
                         child: ElevatedButton(
-                          onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction, // RESTORED ACTION
+                          onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: widget.item.isComingSoon ? Colors.grey : AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -637,7 +638,6 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-// RESTORED: Working WebView Screen for Enrollment
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
