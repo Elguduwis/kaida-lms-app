@@ -27,11 +27,12 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>> register(String fullName, String email, String password) async {
+  // UPDATED: Now accepts a full map of all your registration fields
+  Future<Map<String, dynamic>> register(Map<String, String> userData) async {
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.registerNative),
-        body: {'full_name': fullName, 'email': email, 'password': password},
+        body: userData,
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
