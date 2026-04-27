@@ -89,22 +89,45 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
+  void _handleEnroll() {
+    if (widget.item.isComingSoon) return;
+    
+    if (_isEnrolled) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Redirecting to Course Player...')));
+      // Future: Navigator.push(context, MaterialPageRoute(builder: (_) => CoursePlayerScreen(slug: widget.item.slug)));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Processing Enrollment...')));
+      // Future: Connect to Paystack/Flutterwave or enroll free course API
+    }
+  }
+
+  // FIX: Stat cards now have a strict fixed height and FittedBox to prevent breaking
   Widget _buildStatCard(IconData icon, String value, String label, bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      height: 90, 
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor.withOpacity(0.05),
+        color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.grey.shade800 : AppTheme.primaryColor.withOpacity(0.1)),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: isDark ? Colors.black12 : Colors.grey.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: AppTheme.primaryColor, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+          Icon(icon, color: AppTheme.primaryColor, size: 22),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown, 
+            child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown, 
+            child: Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.w600), textAlign: TextAlign.center)
+          ),
         ],
       ),
     );
@@ -114,7 +137,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Price Formatting
     String priceText = 'Free';
     if (!widget.item.isFree) {
        priceText = widget.item.discountPrice > 0 
@@ -131,69 +153,92 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                 NestedScrollView(
                   headerSliverBuilder: (context, innerBoxIsScrolled) {
                     return [
-                      // Image & Header Elements
                       SliverToBoxAdapter(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Top Image Stack
-                            Stack(
-                              children: [
-                                Container(
-                                  height: 250,
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    image: DecorationImage(
-                                      image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
-                                      fit: BoxFit.cover,
+                            // FIX: Premium Nested Header Layout matching Figma exactly
+                            SafeArea(
+                              bottom: false,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => Navigator.pop(context),
+                                      child: Icon(Icons.arrow_back_rounded, color: isDark ? Colors.white : Colors.black, size: 28),
                                     ),
-                                  ),
-                                ),
-                                // Back Button
-                                Positioned(
-                                  top: MediaQuery.of(context).padding.top + 10,
-                                  left: 16,
-                                  child: GestureDetector(
-                                    onTap: () => Navigator.pop(context),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white, shape: BoxShape.circle),
-                                      child: Icon(Icons.arrow_back_rounded, color: isDark ? Colors.white : Colors.black),
-                                    ),
-                                  ),
-                                ),
-                                // Wishlist Button
-                                Positioned(
-                                  top: MediaQuery.of(context).padding.top + 10,
-                                  right: 16,
-                                  child: GestureDetector(
-                                    onTap: _toggleWishlist,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white, shape: BoxShape.circle),
+                                    GestureDetector(
+                                      onTap: _toggleWishlist,
                                       child: Icon(
                                         _isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
-                                        color: _isWishlisted ? Colors.redAccent : Colors.grey.shade600
+                                        color: _isWishlisted ? Colors.redAccent : Colors.grey.shade400,
+                                        size: 28,
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                                // Price Badge
-                                Positioned(
-                                  bottom: 16,
-                                  right: 16,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    decoration: BoxDecoration(color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(20)),
-                                    child: Text(priceText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
+                            
+                            // FIX: Thumbnail Nested in Div with Rounded Corners
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Container(
+                                      height: 200,
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        image: DecorationImage(
+                                          image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      // FIX: Video Play Button Overlay
+                                      child: _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty
+                                          ? Center(
+                                              child: Container(
+                                                padding: const EdgeInsets.all(14),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.8),
+                                                  shape: BoxShape.circle,
+                                                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)],
+                                                ),
+                                                child: const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  
+                                  // Floating Price Badge
+                                  Positioned(
+                                    bottom: -16,
+                                    right: 16,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryColor, 
+                                        borderRadius: BorderRadius.circular(24),
+                                        boxShadow: [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
+                                      ),
+                                      child: Text(priceText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            
+                            const SizedBox(height: 32),
                             
                             // Info Section
                             Padding(
-                              padding: const EdgeInsets.all(20),
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -202,13 +247,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   
                                   Row(
                                     children: [
-                                      const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-                                      const SizedBox(width: 4),
+                                      const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                                      const SizedBox(width: 6),
                                       Text(_details?['review_summary']?['avg_rating']?.toString() ?? '4.5', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                                       const SizedBox(width: 4),
                                       Text('(${_details?['review_summary']?['total_reviews'] ?? '0'} reviews)', style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                                       const SizedBox(width: 12),
-                                      Container(height: 14, width: 1, color: Colors.grey.shade300),
+                                      Container(height: 14, width: 1.5, color: Colors.grey.shade300),
                                       const SizedBox(width: 12),
                                       Text(widget.item.categoryName, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)),
                                     ],
@@ -216,18 +261,20 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   
                                   const SizedBox(height: 24),
                                   
-                                  // Stats Grid
+                                  // FIX: Guaranteed Equal Sized Cards
                                   Row(
                                     children: [
                                       Expanded(child: _buildStatCard(Icons.people_alt_rounded, _details?['student_count']?.toString() ?? '0', 'Students', isDark)),
-                                      const SizedBox(width: 12),
-                                      Expanded(child: _buildStatCard(Icons.access_time_rounded, '25 hours', 'Duration', isDark)), // Mock duration if not in API
-                                      const SizedBox(width: 12),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: _buildStatCard(Icons.access_time_rounded, '25 hours', 'Duration', isDark)), 
+                                      const SizedBox(width: 8),
                                       Expanded(child: _buildStatCard(Icons.play_lesson_rounded, _details?['sections']?.length.toString() ?? '0', 'Modules', isDark)),
-                                      const SizedBox(width: 12),
+                                      const SizedBox(width: 8),
                                       Expanded(child: _buildStatCard(Icons.workspace_premium_rounded, 'Yes', 'Certificate', isDark)),
                                     ],
                                   ),
+                                  
+                                  const SizedBox(height: 24),
                                 ],
                               ),
                             ),
@@ -235,7 +282,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                         ),
                       ),
                       
-                      // TabBar Header (Sticks to top when scrolling)
                       SliverPersistentHeader(
                         pinned: true,
                         delegate: _SliverAppBarDelegate(
@@ -258,7 +304,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                     ];
                   },
                   
-                  // Tab Views
                   body: TabBarView(
                     controller: _tabController,
                     children: [
@@ -283,10 +328,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                       child: SizedBox(
                         height: 54,
                         child: ElevatedButton(
-                          onPressed: widget.item.isComingSoon ? null : () {},
+                          // FIX: Attached Enroll Action
+                          onPressed: widget.item.isComingSoon ? null : _handleEnroll,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            elevation: 0,
                           ),
                           child: Text(
                             widget.item.isComingSoon ? 'Coming Soon' : (_isEnrolled ? 'Start Course' : 'Enroll Course $priceText'),
@@ -302,14 +349,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  // --- ABOUT TAB ---
   Widget _buildAboutTab(bool isDark) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Instructor
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
@@ -333,9 +378,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  // --- LESSONS TAB ---
   Widget _buildLessonsTab(bool isDark) {
-    // Mock parsing if exact structure isn't available, assumes a list of items
     List<dynamic> lessons = [];
     if (_details?['items_by_section'] != null) {
       _details!['items_by_section'].forEach((key, value) {
@@ -348,14 +391,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       itemCount: lessons.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
         var lesson = lessons[index];
         return Row(
           children: [
-            // Thumbnail / Number Box
             Container(
               height: 56, width: 64,
               decoration: BoxDecoration(
@@ -381,7 +423,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                 children: [
                   Text(lesson['title'] ?? 'Lesson', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   const SizedBox(height: 4),
-                  Text('15:00 mins', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)), // Mock time
+                  Text('15:00 mins', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)), 
                 ],
               ),
             ),
@@ -396,16 +438,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  // --- REVIEWS TAB ---
   Widget _buildReviewsTab(bool isDark) {
     List<dynamic> reviews = _details?['reviews'] ?? [];
     
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Rating Summary Header
           Row(
             children: [
               Column(
@@ -425,7 +465,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                 ],
               ),
               const SizedBox(width: 24),
-              // Progress Bars
               Expanded(
                 child: Column(
                   children: [5, 4, 3, 2, 1].map((star) {
@@ -439,7 +478,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(4),
                               child: LinearProgressIndicator(
-                                value: star == 5 ? 0.7 : (star == 4 ? 0.2 : 0.05), // Mock distribution
+                                value: star == 5 ? 0.7 : (star == 4 ? 0.2 : 0.05), 
                                 backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                                 valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
                                 minHeight: 6,
@@ -484,7 +523,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                             children: [
                               ...List.generate(5, (i) => Icon(Icons.star_rounded, size: 14, color: i < (r['rating'] ?? 5) ? Colors.amber : Colors.grey.shade300)),
                               const SizedBox(width: 8),
-                              Text('1 week ago', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)), // Mock date
+                              Text('1 week ago', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)), 
                             ],
                           ),
                         ],
@@ -503,7 +542,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   }
 }
 
-// Utility class for pinning the TabBar
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
   final Color _color;
