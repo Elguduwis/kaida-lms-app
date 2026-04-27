@@ -42,7 +42,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
         Uri.parse(ApiConfig.changePassword),
         body: {
           'user_id': userId.toString(),
-          'old_password': _oldPasswordController.text,
+          'current_password': _oldPasswordController.text,
           'new_password': _newPasswordController.text,
         }
       );
