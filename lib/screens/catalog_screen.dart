@@ -8,10 +8,11 @@ import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
 import 'item_details_screen.dart';
 
-// CatalogItem Model defined here so it can be used by Home and Catalog screens
+// FIX: Added missing type, slug, and isComingSoon properties expected by ItemDetailsScreen
 class CatalogItem {
   final int id;
   final String title;
+  final String slug;
   final String thumbnailUrl;
   final double price;
   final double discountPrice;
@@ -19,11 +20,13 @@ class CatalogItem {
   final String instructorName;
   final String categoryName;
   final String language;
-  final String itemType;
+  final String type;
+  final bool isComingSoon;
 
   CatalogItem({
     required this.id,
     required this.title,
+    required this.slug,
     required this.thumbnailUrl,
     required this.price,
     required this.discountPrice,
@@ -31,13 +34,21 @@ class CatalogItem {
     required this.instructorName,
     required this.categoryName,
     required this.language,
-    required this.itemType,
+    required this.type,
+    this.isComingSoon = false,
   });
 
-  factory CatalogItem.fromJson(Map<String, dynamic> json, String type) {
+  factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
+    bool comingSoon = false;
+    if (json['release_date'] != null) {
+      DateTime? release = DateTime.tryParse(json['release_date'].toString());
+      if (release != null && release.isAfter(DateTime.now())) comingSoon = true;
+    }
+
     return CatalogItem(
       id: int.tryParse(json['id'].toString()) ?? 0,
       title: json['title'] ?? 'Untitled',
+      slug: json['slug'] ?? '',
       thumbnailUrl: json['thumbnail_url'] != null && json['thumbnail_url'].toString().isNotEmpty
           ? (json['thumbnail_url'].toString().startsWith('http') ? json['thumbnail_url'] : 'https://academy.kainuwa.africa/${json['thumbnail_url']}')
           : '',
@@ -47,7 +58,8 @@ class CatalogItem {
       instructorName: json['instructor_name'] ?? json['author_name'] ?? 'Kaida Instructor',
       categoryName: json['category_name'] ?? 'General',
       language: json['language'] ?? 'EN',
-      itemType: type,
+      type: itemType,
+      isComingSoon: comingSoon,
     );
   }
 }
@@ -70,7 +82,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   
   final TextEditingController _searchController = TextEditingController();
 
-  // Filter State
   String _selectedCategory = 'All';
   String _selectedLevel = 'All';
   RangeValues _priceRange = const RangeValues(0, 50000);
@@ -158,7 +169,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
           List<CatalogItem> parsedList = [];
           for (var item in list) {
             try {
-              parsedList.add(CatalogItem.fromJson(item, widget.actionType.contains('products') ? 'product' : 'course'));
+              parsedList.add(CatalogItem.fromJson(item, widget.actionType.contains('products') ? 'products' : 'courses'));
             } catch (e) {}
           }
           if (mounted) {
@@ -187,7 +198,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
     });
   }
 
-  // --- ADVANCED FILTER MODAL UI ---
   void _showFilterModal(bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -345,7 +355,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Modern Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -381,7 +390,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
             
-            // Grid Content
             Expanded(
               child: _isLoading 
                 ? const Center(child: KaidaLoader())
@@ -403,10 +411,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           padding: const EdgeInsets.all(16),
                           physics: const AlwaysScrollableScrollPhysics(),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, // 2 CARDS PER ROW
+                            crossAxisCount: 2,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 16,
-                            mainAxisExtent: 260, // Fixed height to prevent overflow
+                            mainAxisExtent: 260,
                           ),
                           itemCount: _filteredItems.length,
                           itemBuilder: (context, index) => _buildGridCard(_filteredItems[index], isDark),
@@ -419,7 +427,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
     );
   }
 
-  // --- EXACTLY MATCHES HOME SCREEN CARD STYLE BUT ADAPTED FOR GRID ---
   Widget _buildGridCard(CatalogItem item, bool isDark) {
     int discountPercent = 0;
     if (item.price > 0 && item.discountPrice > 0 && item.discountPrice < item.price) {
@@ -440,7 +447,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail Stack
             Stack(
               children: [
                 ClipRRect(
@@ -449,7 +455,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
                       : Container(height: 110, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
-                if (discountPercent > 0)
+                if (discountPercent > 0 && !item.isComingSoon)
                   Positioned(
                     top: 8, left: 8,
                     child: Container(
@@ -458,25 +464,27 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                Positioned(
-                  top: 6, right: 6,
-                  child: GestureDetector(
-                    onTap: () => _toggleWishlist(item.id),
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9), shape: BoxShape.circle),
-                      child: Icon(
-                        isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        color: isWishlisted ? Colors.redAccent : Colors.grey.shade600,
-                        size: 16, // Slightly smaller for grid
+                if (!item.isComingSoon)
+                  Positioned(
+                    top: 6, right: 6,
+                    child: GestureDetector(
+                      onTap: () => _toggleWishlist(item.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9), shape: BoxShape.circle),
+                        child: Icon(
+                          isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: isWishlisted ? Colors.redAccent : Colors.grey.shade600,
+                          size: 16,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                if (item.isComingSoon)
+                  Container(height: 110, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
               ],
             ),
             
-            // Content Body
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(10),
@@ -505,8 +513,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ],
                     ),
                     const Spacer(),
-                    // Price Row
-                    if (item.isFree || (item.price == 0 && item.discountPrice == 0))
+                    
+                    if (item.isComingSoon)
+                      const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12))
+                    else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
                       const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
                     else if (item.discountPrice > 0 && item.discountPrice < item.price)
                       Row(
