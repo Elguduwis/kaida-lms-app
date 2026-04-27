@@ -7,7 +7,6 @@ import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../config/theme_provider.dart';
 import 'login_screen.dart';
-import 'main_layout.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -34,7 +33,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     
-    // 1. Instantly load cached local data
     if (mounted) {
       setState(() {
         _name = prefs.getString('full_name') ?? prefs.getString('username') ?? 'Kaida Student';
@@ -44,7 +42,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (userId == null) return;
 
-    // 2. Fetch fresh data from the server quietly in the background
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.userProfile),
@@ -68,7 +65,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _walletBalance = data['data']['wallet_balance']?.toString() ?? '0.00';
             _isLoading = false;
             
-            // Update the cache
             prefs.setString('full_name', _name);
             prefs.setString('email', _email);
           });
@@ -80,7 +76,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleLogout() async {
-    // Show confirmation dialog
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -96,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
-              await prefs.clear(); // Destroys the local token and session
+              await prefs.clear();
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(
                 context, 
@@ -191,12 +186,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        automaticallyImplyLeading: false, // FIX: Removed the back arrow since this is a main tab
         title: Text('Profile', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
-          // Routes safely back to the Home tab instead of popping the app
-          onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout(initialIndex: 0))),
-        ),
         actions: [
           IconButton(
             icon: Icon(Icons.edit_rounded, color: AppTheme.primaryColor, size: 22),
@@ -212,8 +203,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             const SizedBox(height: 20),
-            
-            // 1. Avatar & Info Section
             Center(
               child: Column(
                 children: [
@@ -242,10 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            
             const SizedBox(height: 30),
-            
-            // 2. Stats Row
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Row(
@@ -256,10 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            
             const SizedBox(height: 30),
-            
-            // 3. Menu Options
             _buildOptionTile(
               icon: Icons.person_outline_rounded,
               title: 'Edit Profile',
@@ -285,12 +268,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               isDark: isDark,
               onTap: () {},
             ),
-            
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 10),
               child: Divider(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
             ),
-            
             _buildOptionTile(
               icon: Icons.language_rounded,
               title: 'Language',
@@ -305,8 +286,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onTap: () {},
             ),
-            
-            // Native Theme Switcher
             _buildOptionTile(
               icon: Icons.dark_mode_outlined,
               title: 'Dark Mode',
@@ -322,25 +301,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 themeProvider.toggleTheme(!isDark);
               },
             ),
-            
             _buildOptionTile(
               icon: Icons.help_outline_rounded,
               title: 'Help Center',
               isDark: isDark,
               onTap: () {},
             ),
-            
             const SizedBox(height: 10),
-            
             _buildOptionTile(
               icon: Icons.logout_rounded,
               title: 'Log Out',
               isDark: isDark,
               isLogout: true,
-              trailing: const SizedBox(), // No arrow for logout
+              trailing: const SizedBox(),
               onTap: _handleLogout,
             ),
-            
             const SizedBox(height: 40),
           ],
         ),
