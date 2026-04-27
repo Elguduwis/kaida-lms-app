@@ -40,7 +40,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _handleRegister() async {
     FocusScope.of(context).unfocus();
     
-    // Validations matching your PHP
     if (_fullNameController.text.isEmpty || _usernameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields')));
       return;
@@ -56,7 +55,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     
     setState(() => _isLoading = true);
     
-    // Bundle all data for your new API
     final userData = {
       'full_name': _fullNameController.text.trim(),
       'username': _usernameController.text.trim().toLowerCase(),
@@ -80,7 +78,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // Reusable widget for Text Inputs matching Login UI
   Widget _buildCustomInput({
     required IconData icon,
     required String label,
@@ -138,7 +135,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // Reusable widget for Dropdowns matching Login UI
   Widget _buildCustomDropdown({
     required IconData icon,
     required String label,
@@ -165,6 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               DropdownButtonFormField<String>(
                 value: value,
                 isExpanded: true,
+                menuMaxHeight: 250, // FIX: Forces the menu to scroll if it gets too long
                 dropdownColor: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.w500),
                 icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade400),
