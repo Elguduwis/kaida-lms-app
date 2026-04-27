@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Official Kaida Brand Colors
@@ -7,7 +8,7 @@ class AppTheme {
   
   // Legacy Constants (Fixed Background to Pure White)
   static const Color secondaryColor = Color(0xFF1E1E2D);
-  static const Color backgroundColor = Colors.white; // Enforcing pure white
+  static const Color backgroundColor = Colors.white; 
   static const Color darkBackgroundColor = Color(0xFF121212);
   static const Color darkSurfaceColor = Color(0xFF1E1E1E);
   
@@ -20,7 +21,8 @@ class AppTheme {
       brightness: Brightness.light,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
-      fontFamily: 'DMSans',
+      // Apply Lato to ALL text in Light Mode
+      textTheme: GoogleFonts.latoTextTheme(ThemeData.light().textTheme),
       colorScheme: const ColorScheme.light(
         primary: primaryColor,
         secondary: accentColor,
@@ -32,13 +34,13 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          textStyle: GoogleFonts.lato(fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: textMainMode,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          textStyle: GoogleFonts.lato(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
     );
@@ -49,7 +51,11 @@ class AppTheme {
       brightness: Brightness.dark,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: darkBackgroundColor,
-      fontFamily: 'DMSans',
+      // Apply Lato to ALL text in Dark Mode and force it to be white
+      textTheme: GoogleFonts.latoTextTheme(ThemeData.dark().textTheme).apply(
+        bodyColor: Colors.white,
+        displayColor: Colors.white,
+      ),
       colorScheme: const ColorScheme.dark(
         primary: primaryColor,
         secondary: accentColor,
@@ -61,13 +67,13 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          textStyle: GoogleFonts.lato(fontWeight: FontWeight.bold, fontSize: 16),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: textDarkMode,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+          textStyle: GoogleFonts.lato(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
     );

@@ -124,7 +124,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             style: TextStyle(
                               fontSize: 28, 
                               fontWeight: FontWeight.w900,
-                              fontFamily: 'DMSans',
                               color: isDark ? Colors.white : Colors.black, 
                             ),
                             children: [
@@ -166,7 +165,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     'Skip',
                     style: TextStyle(
                       fontSize: 17,
-                      fontFamily: 'sans-serif', 
                       fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white : Colors.black, 
                     ),
