@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Official Kaida Brand Colors
   static const Color primaryColor = Color(0xFF7351FF); // Kaida Purple
   static const Color accentColor = Color(0xFF00E5FF);
   
-  // Legacy Constants (Fixed Background to Pure White)
+  // Legacy Constants
   static const Color secondaryColor = Color(0xFF1E1E2D);
   static const Color backgroundColor = Colors.white; 
   static const Color darkBackgroundColor = Color(0xFF121212);
@@ -21,8 +20,8 @@ class AppTheme {
       brightness: Brightness.light,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
-      // Apply Lato to ALL text in Light Mode
-      textTheme: GoogleFonts.latoTextTheme(ThemeData.light().textTheme),
+      // Natively applies the offline Lato font to the entire app
+      fontFamily: 'Lato',
       colorScheme: const ColorScheme.light(
         primary: primaryColor,
         secondary: accentColor,
@@ -34,13 +33,13 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: GoogleFonts.lato(fontWeight: FontWeight.bold, fontSize: 16),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Lato'),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: textMainMode,
-          textStyle: GoogleFonts.lato(fontWeight: FontWeight.w600, fontSize: 16),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, fontFamily: 'Lato'),
         ),
       ),
     );
@@ -51,11 +50,8 @@ class AppTheme {
       brightness: Brightness.dark,
       primaryColor: primaryColor,
       scaffoldBackgroundColor: darkBackgroundColor,
-      // Apply Lato to ALL text in Dark Mode and force it to be white
-      textTheme: GoogleFonts.latoTextTheme(ThemeData.dark().textTheme).apply(
-        bodyColor: Colors.white,
-        displayColor: Colors.white,
-      ),
+      // Natively applies the offline Lato font to the entire app
+      fontFamily: 'Lato',
       colorScheme: const ColorScheme.dark(
         primary: primaryColor,
         secondary: accentColor,
@@ -67,13 +63,13 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          textStyle: GoogleFonts.lato(fontWeight: FontWeight.bold, fontSize: 16),
+          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Lato'),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: textDarkMode,
-          textStyle: GoogleFonts.lato(fontWeight: FontWeight.w600, fontSize: 16),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, fontFamily: 'Lato'),
         ),
       ),
     );
