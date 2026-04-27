@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -26,22 +27,47 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<CatalogItem> _activeCourses = [];
   List<CatalogItem> _comingSoonCourses = [];
+  Set<int> _wishlistedCourseIds = {}; // Tracks wishlists securely in RAM
   
   String _userName = "Learner"; 
   String? _userAvatar;
 
-  // Expected from new backend structure
   List<dynamic> _banners = [];
   List<dynamic> _categories = [];
   List<dynamic> _instructors = [];
 
   final PageController _bannerController = PageController();
+  int _currentBannerIndex = 0;
+  Timer? _bannerTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchDashboardData();
     _fetchCatalogData();
+    _fetchWishlist();
+    _startBannerTimer();
+  }
+
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerController.dispose();
+    super.dispose();
+  }
+
+  void _startBannerTimer() {
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (Timer timer) {
+      if (_bannerController.hasClients && _banners.isNotEmpty) {
+        int nextIndex = _currentBannerIndex + 1;
+        if (nextIndex >= _banners.length) nextIndex = 0;
+        _bannerController.animateToPage(
+          nextIndex,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
   }
 
   String _getGreeting() {
@@ -49,6 +75,70 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Good Morning,';
     if (hour < 17) return 'Good Afternoon,';
     return 'Good Evening,';
+  }
+
+  Future<void> _fetchWishlist() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId == null) return;
+    try {
+      final response = await http.post(Uri.parse(ApiConfig.getWishlist), body: {'user_id': userId.toString()});
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && mounted) {
+          setState(() {
+            _wishlistedCourseIds = (data['data'] as List)
+                .where((item) => item['item_type'] == 'course')
+                .map<int>((item) => int.tryParse(item['item_id'].toString()) ?? 0)
+                .toSet();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Wishlist fetch error: $e");
+    }
+  }
+
+  Future<void> _toggleWishlist(int courseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save courses.')));
+      return;
+    }
+
+    final isCurrentlyWishlisted = _wishlistedCourseIds.contains(courseId);
+    
+    // Optimistic UI Update for instant feedback
+    setState(() {
+      if (isCurrentlyWishlisted) _wishlistedCourseIds.remove(courseId);
+      else _wishlistedCourseIds.add(courseId);
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.toggleWishlist),
+        body: {'user_id': userId.toString(), 'item_id': courseId.toString(), 'item_type': 'course'}
+      );
+      final data = json.decode(response.body);
+      
+      if (data['status'] != 'success') {
+        // Revert if API failed
+        setState(() {
+          if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
+          else _wishlistedCourseIds.remove(courseId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Action failed.')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message']), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
+      }
+    } catch (e) {
+      // Revert on connection error
+      setState(() {
+        if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
+        else _wishlistedCourseIds.remove(courseId);
+      });
+    }
   }
 
   Future<void> _fetchDashboardData() async {
@@ -59,33 +149,26 @@ class _HomeScreenState extends State<HomeScreen> {
       
       if (mounted) setState(() {
         _userName = savedName;
-        _userAvatar = prefs.getString('avatar_url'); // Load cached avatar if exists
+        _userAvatar = prefs.getString('avatar_url'); 
       });
       
       if (userId == null) return;
 
-      final response = await http.post(
-        Uri.parse(ApiConfig.dashboardData),
-        body: {'user_id': userId.toString()},
-      );
+      final response = await http.post(Uri.parse(ApiConfig.dashboardData), body: {'user_id': userId.toString()});
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && mounted) {
           setState(() {
             _dashboardData = data['data'];
-            
-            // Map dynamic content from your new PHP structure (Fallback to empty arrays safely)
             _banners = data['data']['banners'] ?? [];
             _categories = data['data']['categories'] ?? [];
             _instructors = data['data']['instructors'] ?? [];
             
-            // Cache fresh avatar
             if (data['data']['user'] != null && data['data']['user']['avatar_url'] != null) {
               _userAvatar = data['data']['user']['avatar_url'];
               prefs.setString('avatar_url', _userAvatar!);
             }
-
             _isLoadingDashboard = false;
           });
         }
@@ -115,9 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
               if (isComingSoon) coming.add(parsed); else active.add(parsed);
-            } catch (e) {
-              debugPrint("Parse error: $e");
-            }
+            } catch (e) {}
           }
           if (mounted) {
             setState(() {
@@ -155,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: () async {
             await _fetchDashboardData();
             await _fetchCatalogData();
+            await _fetchWishlist();
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -164,25 +246,21 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _buildTopHeader(isDark),
                 
-                // 1. Dynamic Banners Carousel
                 if (_banners.isNotEmpty) _buildBannerCarousel(),
 
-                // 2. Dynamic Categories
                 if (_categories.isNotEmpty) _buildCategoriesRow(isDark)
-                else _buildFallbackCategoriesRow(isDark), // Shows default icons if API isn't ready yet
+                else _buildFallbackCategoriesRow(isDark), 
 
                 const SizedBox(height: 24),
 
-                // 3. Featured Courses Lists
                 if (_isLoadingCatalog)
                    const Center(child: Padding(padding: EdgeInsets.all(40), child: KaidaLoader()))
                 else ...[
                   _buildCourseHorizontalList('Featured Courses', _getSubList(_activeCourses, 0, 4), isDark),
                   const SizedBox(height: 24),
                   
-                  // 4. Instructors Row
                   if (_instructors.isNotEmpty) _buildInstructorsRow(isDark)
-                  else _buildFallbackInstructorsRow(isDark), // Shows fallback if API isn't ready
+                  else _buildFallbackInstructorsRow(isDark), 
 
                   const SizedBox(height: 24),
                   _buildCourseHorizontalList('Popular Now', _getSubList(_activeCourses, 2, 4), isDark),
@@ -200,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- HEADER: Matches the requested UI design exactly ---
   Widget _buildTopHeader(bool isDark) {
     String safeAvatar = _userAvatar ?? '';
     if (safeAvatar.isNotEmpty && !safeAvatar.startsWith('http')) {
@@ -243,41 +320,64 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- BANNERS: Firebase/PHP Admin Dynamic Slider ---
   Widget _buildBannerCarousel() {
-    return SizedBox(
-      height: 160,
-      child: PageView.builder(
-        controller: _bannerController,
-        itemCount: _banners.length,
-        itemBuilder: (context, index) {
-          final banner = _banners[index];
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              image: DecorationImage(
-                image: NetworkImage(banner['image_url']),
-                fit: BoxFit.cover,
+    return Stack(
+      alignment: Alignment.bottomLeft,
+      children: [
+        SizedBox(
+          height: 160,
+          child: PageView.builder(
+            controller: _bannerController,
+            onPageChanged: (index) {
+              setState(() => _currentBannerIndex = index);
+            },
+            itemCount: _banners.length,
+            itemBuilder: (context, index) {
+              final banner = _banners[index];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: DecorationImage(image: NetworkImage(banner['image_url']), fit: BoxFit.cover),
+                ),
+              );
+            },
+          ),
+        ),
+        // Bottom Left Animated Dots
+        Positioned(
+          bottom: 12,
+          left: 36,
+          child: Row(
+            children: List.generate(
+              _banners.length,
+              (index) => AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.only(right: 6),
+                height: 6,
+                width: _currentBannerIndex == index ? 20 : 6,
+                decoration: BoxDecoration(
+                  color: _currentBannerIndex == index ? AppTheme.primaryColor : Colors.white.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 
-  // --- CATEGORIES ---
   Widget _buildCategoriesRow(bool isDark) {
     return _buildCategoryTemplate(_categories, isDark);
   }
 
   Widget _buildFallbackCategoriesRow(bool isDark) {
     final defaultCats = [
-      {'name': 'Coding', 'icon': Icons.code_rounded},
-      {'name': 'Design', 'icon': Icons.brush_rounded},
-      {'name': 'Business', 'icon': Icons.business_center_rounded},
-      {'name': 'Marketing', 'icon': Icons.campaign_rounded},
+      {'id': '1', 'name': 'Coding', 'icon': Icons.code_rounded},
+      {'id': '2', 'name': 'Design', 'icon': Icons.brush_rounded},
+      {'id': '3', 'name': 'Business', 'icon': Icons.business_center_rounded},
+      {'id': '4', 'name': 'Marketing', 'icon': Icons.campaign_rounded},
     ];
     return Column(
       children: [
@@ -301,18 +401,21 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: defaultCats.length,
             itemBuilder: (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                      child: Icon(defaultCats[index]['icon'] as IconData, color: AppTheme.primaryColor, size: 24),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(defaultCats[index]['name'] as String, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  ],
+              return GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CatalogScreen(actionType: 'category_${defaultCats[index]['id']}', title: defaultCats[index]['name'] as String))),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+                        child: Icon(defaultCats[index]['icon'] as IconData, color: AppTheme.primaryColor, size: 24),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(defaultCats[index]['name'] as String, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
                 ),
               );
             },
@@ -346,7 +449,10 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: cats.length,
             itemBuilder: (context, index) {
               return GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  // Passes the category action to Catalog Screen
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CatalogScreen(actionType: 'category_${cats[index]['id']}', title: cats[index]['name'])));
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
@@ -354,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                        child: const Icon(Icons.category_rounded, color: AppTheme.primaryColor, size: 24), // Dynamic icon logic can be added here
+                        child: const Icon(Icons.category_rounded, color: AppTheme.primaryColor, size: 24),
                       ),
                       const SizedBox(height: 8),
                       Text(cats[index]['name'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
@@ -369,9 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- INSTRUCTORS ---
   Widget _buildFallbackInstructorsRow(bool isDark) {
-    // Placeholder while API is being built
     final defaultInstructors = ['Mal. Ibrahim', 'Osama Elguduwis', 'Ummulkhairi'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,7 +551,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- COURSE CARDS: Math Logic + UI Sync ---
   Widget _buildCourseHorizontalList(String title, List<CatalogItem> items, bool isDark, {bool isComingSoon = false}) {
     if (items.isEmpty) return const SizedBox();
     return Column(
@@ -481,11 +584,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCourseCard(CatalogItem item, bool isDark, bool isComingSoon) {
-    // MATHEMATICAL AUTOMATION: Calculate percentage off
     int discountPercent = 0;
     if (item.price > 0 && item.discountPrice > 0 && item.discountPrice < item.price) {
       discountPercent = (((item.price - item.discountPrice) / item.price) * 100).round();
     }
+    
+    bool isWishlisted = _wishlistedCourseIds.contains(item.id);
 
     return GestureDetector(
       onTap: () {
@@ -504,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail & Badges
+            // Thumbnail & Overlays
             Stack(
               children: [
                 ClipRRect(
@@ -513,32 +617,66 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 120, width: double.infinity, fit: BoxFit.cover)
                       : Container(height: 120, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
+                
+                // Discount Badge (Top Left)
                 if (discountPercent > 0 && !isComingSoon)
                   Positioned(
-                    top: 10, right: 10,
+                    top: 10, left: 10,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
                       child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
+                  
+                // Wishlist Button (Top Right)
+                if (!isComingSoon)
+                  Positioned(
+                    top: 8, right: 8,
+                    child: GestureDetector(
+                      onTap: () => _toggleWishlist(item.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9), 
+                          shape: BoxShape.circle
+                        ),
+                        child: Icon(
+                          isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: isWishlisted ? Colors.redAccent : Colors.grey.shade600,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ),
+
                 if (isComingSoon)
                   Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
               ],
             ),
             
-            // Content
+            // Content Body
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
+                      // Language Label moved from Thumbnail to Card Body
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                        child: Text(item.language.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   
-                  // Instructor Row
                   Row(
                     children: [
                       const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
@@ -549,7 +687,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   
                   const SizedBox(height: 12),
                   
-                  // Price Row
                   if (isComingSoon)
                     const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13))
                   else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
