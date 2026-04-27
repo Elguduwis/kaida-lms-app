@@ -89,7 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _wishlistedCourseIds = (data['data'] as List)
                 .where((item) => item['item_type'] == 'course')
-                .map<int>((item) => int.tryParse(item['item_id'].toString()) ?? 0)
+                .map<int>((item) => int.tryParse((item['item_id'] ?? item['id']).toString()) ?? 0)
                 .toSet();
           });
         }
