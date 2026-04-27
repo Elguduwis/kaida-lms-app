@@ -286,7 +286,8 @@ class _HomeScreenState extends State<HomeScreen> {
           CircleAvatar(
             radius: 24,
             backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-            backgroundImage: safeAvatar.isNotEmpty ? NetworkImage(safeAvatar) : null,
+            // FIX: CachedNetworkImageProvider added for fast offline loading
+            backgroundImage: safeAvatar.isNotEmpty ? CachedNetworkImageProvider(safeAvatar) : null,
             child: safeAvatar.isEmpty ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
           ),
           const SizedBox(width: 12),
@@ -333,13 +334,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  image: DecorationImage(image: NetworkImage(banner['image_url']), fit: BoxFit.cover),
+                  image: DecorationImage(
+                    // FIX: Banners now cache locally immediately upon first load
+                    image: CachedNetworkImageProvider(banner['image_url']), 
+                    fit: BoxFit.cover
+                  ),
                 ),
               );
             },
           ),
         ),
-        // FIX: Centered Dots
         Positioned(
           bottom: 12,
           left: 0,
@@ -380,7 +384,6 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          // FIX: Clean Row without duplicated arguments
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -428,7 +431,6 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          // FIX: Clean Row without duplicated arguments
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -524,6 +526,14 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: _instructors.length,
             itemBuilder: (context, index) {
+              
+              // FIX: Safely parse Instructor Avatar URLs so they don't break
+              String? rawAvatar = _instructors[index]['avatar_url']?.toString();
+              String? safeAvatar;
+              if (rawAvatar != null && rawAvatar.isNotEmpty) {
+                safeAvatar = rawAvatar.startsWith('http') ? rawAvatar : 'https://academy.kainuwa.africa/$rawAvatar';
+              }
+
               return GestureDetector(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InstructorProfileScreen(instructor: _instructors[index]))),
                 child: Padding(
@@ -533,8 +543,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       CircleAvatar(
                         radius: 30, 
                         backgroundColor: AppTheme.primaryColor.withOpacity(0.1), 
-                        backgroundImage: _instructors[index]['avatar_url'] != null ? NetworkImage(_instructors[index]['avatar_url']) : null,
-                        child: _instructors[index]['avatar_url'] == null ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
+                        // FIX: Added CachedNetworkImageProvider for avatars
+                        backgroundImage: safeAvatar != null ? CachedNetworkImageProvider(safeAvatar) : null,
+                        child: safeAvatar == null ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
                       ),
                       const SizedBox(height: 8),
                       Text(_instructors[index]['name'] ?? 'Instructor', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -556,7 +567,6 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          // FIX: Clean Row without duplicated arguments
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
