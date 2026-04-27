@@ -27,7 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   List<CatalogItem> _activeCourses = [];
   List<CatalogItem> _comingSoonCourses = [];
-  Set<int> _wishlistedCourseIds = {}; // Tracks wishlists securely in RAM
+  Set<int> _wishlistedCourseIds = {}; 
   
   String _userName = "Learner"; 
   String? _userAvatar;
@@ -94,9 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       }
-    } catch (e) {
-      debugPrint("Wishlist fetch error: $e");
-    }
+    } catch (e) {}
   }
 
   Future<void> _toggleWishlist(int courseId) async {
@@ -109,7 +107,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final isCurrentlyWishlisted = _wishlistedCourseIds.contains(courseId);
     
-    // Optimistic UI Update for instant feedback
     setState(() {
       if (isCurrentlyWishlisted) _wishlistedCourseIds.remove(courseId);
       else _wishlistedCourseIds.add(courseId);
@@ -123,7 +120,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final data = json.decode(response.body);
       
       if (data['status'] != 'success') {
-        // Revert if API failed
         setState(() {
           if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
           else _wishlistedCourseIds.remove(courseId);
@@ -133,7 +129,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message']), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
       }
     } catch (e) {
-      // Revert on connection error
       setState(() {
         if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
         else _wishlistedCourseIds.remove(courseId);
@@ -286,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
         children: [
           CircleAvatar(
             radius: 24,
@@ -322,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBannerCarousel() {
     return Stack(
-      alignment: Alignment.bottomLeft,
+      alignment: Alignment.bottomCenter,
       children: [
         SizedBox(
           height: 160,
@@ -344,16 +339,18 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
         ),
-        // Bottom Left Animated Dots
+        // FIX: Centered Dots
         Positioned(
           bottom: 12,
-          left: 0, right: 0,
-          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(
               _banners.length,
               (index) => AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
-                margin: const EdgeInsets.only(right: 6),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
                 height: 6,
                 width: _currentBannerIndex == index ? 20 : 6,
                 decoration: BoxDecoration(
@@ -383,7 +380,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+          // FIX: Clean Row without duplicated arguments
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -430,7 +428,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+          // FIX: Clean Row without duplicated arguments
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Categories', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -450,7 +449,6 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (context, index) {
               return GestureDetector(
                 onTap: () {
-                  // Passes the category action to Catalog Screen
                   Navigator.push(context, MaterialPageRoute(builder: (_) => CatalogScreen(actionType: 'category_${cats[index]['id']}', title: cats[index]['name'])));
                 },
                 child: Padding(
@@ -558,7 +556,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center,
+          // FIX: Clean Row without duplicated arguments
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -608,7 +607,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail & Overlays
             Stack(
               children: [
                 ClipRRect(
@@ -617,8 +615,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 120, width: double.infinity, fit: BoxFit.cover)
                       : Container(height: 120, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
-                
-                // Discount Badge (Top Left)
                 if (discountPercent > 0 && !isComingSoon)
                   Positioned(
                     top: 10, left: 10,
@@ -628,8 +624,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                  
-                // Wishlist Button (Top Right)
                 if (!isComingSoon)
                   Positioned(
                     top: 8, right: 8,
@@ -649,13 +643,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-
                 if (isComingSoon)
                   Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
               ],
             ),
-            
-            // Content Body
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -665,7 +656,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
-                      // Language Label moved from Thumbnail to Card Body
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
@@ -676,7 +666,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 6),
                   Text(item.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, height: 1.2), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
-                  
                   Row(
                     children: [
                       const Icon(Icons.person_rounded, size: 14, color: Colors.grey),
@@ -684,9 +673,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(child: Text(item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
                     ],
                   ),
-                  
                   const SizedBox(height: 12),
-                  
                   if (isComingSoon)
                     const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13))
                   else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
