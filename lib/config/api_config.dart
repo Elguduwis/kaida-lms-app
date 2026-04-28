@@ -19,4 +19,5 @@ class ApiConfig {
   static const String saveFcmToken = '$baseUrl/save_fcm_token.php';
   static const String appSettings = '$baseUrl/app_settings.php';
   static const String locations = '$baseUrl/locations.php';
+  static const String checkUsername = '$baseUrl/check_username.php';
 }

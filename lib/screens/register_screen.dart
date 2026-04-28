@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -45,12 +46,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  // --- LIVE VALIDATION STATES ---
+  Timer? _usernameDebounce;
+  bool _isCheckingUsername = false;
+  bool? _isUsernameAvailable;
+  bool? _passwordsMatch;
+
   final List<Map<String, String>> _languages = [{'id': 'en', 'name': 'English'}, {'id': 'ha', 'name': 'Hausa'}];
 
   @override
   void initState() {
     super.initState();
     _fetchCountries();
+  }
+
+  @override
+  void dispose() {
+    _usernameDebounce?.cancel();
+    _fullNameController.dispose();
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   // --- API FETCH METHODS ---
@@ -105,6 +123,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  // --- LIVE VALIDATION METHODS ---
+  void _onUsernameChanged(String value) {
+    if (_usernameDebounce?.isActive ?? false) _usernameDebounce!.cancel();
+    
+    if (value.isEmpty) {
+      setState(() { _isUsernameAvailable = null; _isCheckingUsername = false; });
+      return;
+    }
+
+    setState(() => _isCheckingUsername = true);
+    
+    _usernameDebounce = Timer(const Duration(milliseconds: 600), () async {
+      try {
+        final response = await http.get(Uri.parse('${ApiConfig.checkUsername}?username=$value'));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['status'] == 'success' && mounted) {
+            setState(() {
+              _isUsernameAvailable = data['available'];
+              _isCheckingUsername = false;
+            });
+          }
+        }
+      } catch (e) {
+        if (mounted) setState(() => _isCheckingUsername = false);
+      }
+    });
+  }
+
+  void _onPasswordChanged() {
+    if (_confirmPasswordController.text.isEmpty) {
+      setState(() => _passwordsMatch = null);
+      return;
+    }
+    setState(() {
+      _passwordsMatch = _passwordController.text == _confirmPasswordController.text;
+    });
+  }
+
   void _handleRegister() async {
     FocusScope.of(context).unfocus();
     
@@ -112,11 +169,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields')));
       return;
     }
+    if (_isUsernameAvailable == false) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a different username')));
+      return;
+    }
     if (_selectedCountryId == null || _selectedStateId == null || _selectedCityId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please complete your location selection')));
       return;
     }
-    if (_passwordController.text != _confirmPasswordController.text) {
+    if (_passwordsMatch == false) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
@@ -150,10 +211,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // --- NATIVE BOTTOM SHEET PICKER ---
+  // --- NATIVE BOTTOM SHEET PICKER WITH SEARCH ---
   void _openSelectionSheet({required String title, required List<dynamic> items, required Function(String id, String name) onSelect}) {
     if (items.isEmpty) return;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    List<dynamic> filteredItems = List.from(items);
 
     showModalBottomSheet(
       context: context,
@@ -161,46 +224,74 @@ class _RegisterScreenState extends State<RegisterScreen> {
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 8),
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('Select $title', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                ),
-                Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                        title: Text(item['name'], style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16)),
-                        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
-                        onTap: () {
-                          onSelect(item['id'].toString(), item['name'].toString());
-                          Navigator.pop(context);
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.8,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (context, scrollController) {
+                return Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text('Select $title', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: TextField(
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: 'Search...',
+                          hintStyle: TextStyle(color: Colors.grey.shade500),
+                          prefixIcon: Icon(Icons.search, color: Colors.grey.shade500),
+                          filled: true,
+                          fillColor: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            filteredItems = items.where((item) => 
+                              item['name'].toString().toLowerCase().contains(value.toLowerCase())
+                            ).toList();
+                          });
                         },
-                      );
-                    },
-                  ),
-                ),
-              ],
+                      ),
+                    ),
+                    Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                    Expanded(
+                      child: filteredItems.isEmpty 
+                      ? Center(child: Text("No results found", style: TextStyle(color: Colors.grey.shade500)))
+                      : ListView.builder(
+                          controller: scrollController,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: filteredItems.length,
+                          itemBuilder: (context, index) {
+                            final item = filteredItems[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                              title: Text(item['name'], style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16)),
+                              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+                              onTap: () {
+                                onSelect(item['id'].toString(), item['name'].toString());
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        ),
+                    ),
+                  ],
+                );
+              },
             );
-          },
+          }
         );
       },
     );
@@ -239,9 +330,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        valueName ?? 'Select',
-                        style: TextStyle(color: valueName == null || disabled ? Colors.grey : (isDark ? Colors.white : Colors.black), fontSize: 16, fontWeight: FontWeight.w500),
+                      Expanded(
+                        child: Text(
+                          valueName ?? 'Select',
+                          style: TextStyle(color: valueName == null || disabled ? Colors.grey : (isDark ? Colors.white : Colors.black), fontSize: 16, fontWeight: FontWeight.w500),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade400, size: 20),
                     ],
@@ -262,6 +356,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required bool isDark,
     bool isPassword = false,
     bool isConfirm = false,
+    Function(String)? onChanged,
+    Widget? statusWidget,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -280,6 +376,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)),
               TextField(
                 controller: controller,
+                onChanged: onChanged,
                 obscureText: isPassword ? (isConfirm ? _obscureConfirmPassword : _obscurePassword) : false,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.w500),
                 decoration: InputDecoration(
@@ -287,14 +384,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5)),
                   focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primaryColor, width: 2)),
-                  suffixIconConstraints: const BoxConstraints(maxHeight: 32, maxWidth: 32),
-                  suffixIcon: isPassword 
-                    ? IconButton(
-                        padding: EdgeInsets.zero,
-                        icon: Icon((isConfirm ? _obscureConfirmPassword : _obscurePassword) ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade400, size: 20),
-                        onPressed: () => setState(() { if (isConfirm) _obscureConfirmPassword = !_obscureConfirmPassword; else _obscurePassword = !_obscurePassword; }),
-                      ) 
-                    : null,
+                  suffixIconConstraints: const BoxConstraints(maxHeight: 32, maxWidth: 60),
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (statusWidget != null) statusWidget,
+                      if (isPassword) 
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon((isConfirm ? _obscureConfirmPassword : _obscurePassword) ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade400, size: 20),
+                          onPressed: () => setState(() { if (isConfirm) _obscureConfirmPassword = !_obscureConfirmPassword; else _obscurePassword = !_obscurePassword; }),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -308,6 +410,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    // Status widget for Username
+    Widget? usernameStatusWidget;
+    if (_isCheckingUsername) {
+      usernameStatusWidget = const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)));
+    } else if (_isUsernameAvailable == true) {
+      usernameStatusWidget = const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.check_circle, color: Colors.green, size: 18));
+    } else if (_isUsernameAvailable == false) {
+      usernameStatusWidget = const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.cancel, color: Colors.red, size: 18));
+    }
+
+    // Status widget for Confirm Password
+    Widget? passwordStatusWidget;
+    if (_passwordsMatch == true) {
+      passwordStatusWidget = const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.check_circle, color: Colors.green, size: 18));
+    } else if (_passwordsMatch == false) {
+      passwordStatusWidget = const Padding(padding: EdgeInsets.only(right: 8), child: Icon(Icons.cancel, color: Colors.red, size: 18));
+    }
+
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       appBar: AppBar(
@@ -334,7 +454,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _buildCustomInput(icon: Icons.person_rounded, label: 'Full Name', controller: _fullNameController, isDark: isDark),
                 const SizedBox(height: 24),
                 
-                _buildCustomInput(icon: Icons.alternate_email_rounded, label: 'Username', controller: _usernameController, isDark: isDark),
+                _buildCustomInput(
+                  icon: Icons.alternate_email_rounded, label: 'Username', controller: _usernameController, isDark: isDark, 
+                  onChanged: _onUsernameChanged, statusWidget: usernameStatusWidget
+                ),
+                if (_isUsernameAvailable == false) 
+                  const Padding(padding: EdgeInsets.only(left: 58, top: 4), child: Text('Username is already taken', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold))),
                 const SizedBox(height: 24),
                 
                 _buildCustomInput(icon: Icons.email_rounded, label: 'Email address', controller: _emailController, isDark: isDark),
@@ -373,10 +498,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
                 
-                _buildCustomInput(icon: Icons.lock_rounded, label: 'Password', controller: _passwordController, isDark: isDark, isPassword: true),
+                _buildCustomInput(
+                  icon: Icons.lock_rounded, label: 'Password', controller: _passwordController, isDark: isDark, isPassword: true, 
+                  onChanged: (val) => _onPasswordChanged()
+                ),
                 const SizedBox(height: 24),
                 
-                _buildCustomInput(icon: Icons.lock_reset_rounded, label: 'Confirm Password', controller: _confirmPasswordController, isDark: isDark, isPassword: true, isConfirm: true),
+                _buildCustomInput(
+                  icon: Icons.lock_reset_rounded, label: 'Confirm Password', controller: _confirmPasswordController, isDark: isDark, isPassword: true, isConfirm: true, 
+                  onChanged: (val) => _onPasswordChanged(), statusWidget: passwordStatusWidget
+                ),
                 const SizedBox(height: 30),
                 
                 Row(
