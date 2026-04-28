@@ -12,6 +12,8 @@ import 'catalog_screen.dart';
 import 'item_details_screen.dart';
 import 'categories_screen.dart';
 import 'instructor_profile_screen.dart';
+import 'profile_screen.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -283,33 +285,44 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-            // FIX: CachedNetworkImageProvider added for fast offline loading
-            backgroundImage: safeAvatar.isNotEmpty ? CachedNetworkImageProvider(safeAvatar) : null,
-            child: safeAvatar.isEmpty ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            child: CircleAvatar(
+              radius: 24,
+              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              backgroundImage: safeAvatar.isNotEmpty ? CachedNetworkImageProvider(safeAvatar) : null,
+              child: safeAvatar.isEmpty ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_getGreeting(), style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600)),
-                Text(_userName, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
+            child: GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_getGreeting(), style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(_userName, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
-            child: const Icon(Icons.search_rounded, size: 20),
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogScreen(actionType: 'courses', title: 'Search Courses'))),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
+              child: const Icon(Icons.search_rounded, size: 20),
+            ),
           ),
           const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
-            child: const Icon(Icons.notifications_none_rounded, size: 20),
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
+              child: const Icon(Icons.notifications_none_rounded, size: 20),
+            ),
           ),
         ],
       ),
@@ -335,7 +348,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
                   image: DecorationImage(
-                    // FIX: Banners now cache locally immediately upon first load
                     image: CachedNetworkImageProvider(banner['image_url']), 
                     fit: BoxFit.cover
                   ),
@@ -526,8 +538,6 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: _instructors.length,
             itemBuilder: (context, index) {
-              
-              // FIX: Safely parse Instructor Avatar URLs so they don't break
               String? rawAvatar = _instructors[index]['avatar_url']?.toString();
               String? safeAvatar;
               if (rawAvatar != null && rawAvatar.isNotEmpty) {
@@ -543,7 +553,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       CircleAvatar(
                         radius: 30, 
                         backgroundColor: AppTheme.primaryColor.withOpacity(0.1), 
-                        // FIX: Added CachedNetworkImageProvider for avatars
                         backgroundImage: safeAvatar != null ? CachedNetworkImageProvider(safeAvatar) : null,
                         child: safeAvatar == null ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
                       ),

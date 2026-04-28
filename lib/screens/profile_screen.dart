@@ -16,6 +16,9 @@ import 'downloads_screen.dart';
 import 'security_screen.dart';
 import 'webview_screen.dart';
 import 'wishlist_screen.dart';
+import 'edit_profile_screen.dart';
+import 'notifications_screen.dart';
+import 'help_center_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -263,13 +266,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 
                 const SizedBox(height: 40),
 
+                // CORRECTED WEB DASHBOARD ROUTES
+                if (_role == 'admin') ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+                    child: Text('ADMINISTRATOR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  ),
+                  _buildOptionTile(icon: Icons.admin_panel_settings_rounded, title: 'Admin Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Admin Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/admin/dashboard'))); }),
+                  const SizedBox(height: 10),
+                ],
+
                 if (_role == 'instructor' || _role == 'admin') ...[
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
                     child: Text('INSTRUCTOR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-                  _buildOptionTile(icon: Icons.dashboard_customize_rounded, title: 'Instructor Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Instructor Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/index.php'))); }),
-                  _buildOptionTile(icon: Icons.video_library_rounded, title: 'Manage Courses', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Manage Courses', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/courses.php'))); }),
+                  _buildOptionTile(icon: Icons.dashboard_customize_rounded, title: 'Instructor Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Instructor Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/dashboard'))); }),
                   const SizedBox(height: 10),
                 ],
 
@@ -278,8 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
                     child: Text('AFFILIATE', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-                  _buildOptionTile(icon: Icons.campaign_rounded, title: 'Affiliate Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Affiliate Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/index.php'))); }),
-                  _buildOptionTile(icon: Icons.group_rounded, title: 'My Referrals', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'My Referrals', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/referrals.php'))); }),
+                  _buildOptionTile(icon: Icons.campaign_rounded, title: 'Affiliate Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Affiliate Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/dashboard'))); }),
                   const SizedBox(height: 10),
                 ],
 
@@ -288,27 +299,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Text('GENERAL', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 ),
 
-                _buildOptionTile(icon: Icons.person_rounded, title: 'Edit Profile', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.person_rounded, title: 'Edit Profile', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+                }),
+                
                 _buildOptionTile(icon: Icons.account_balance_wallet_rounded, title: 'Kaida Tokens', isDark: isDark, trailing: Text(_walletBalance, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 16)), onTap: () {}),
                 
-                // ROUTED: Wishlist
                 _buildOptionTile(icon: Icons.favorite_rounded, title: 'My Wishlist', isDark: isDark, onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistScreen()));
                 }),
                 
-                // ROUTED: Digital Shop
                 _buildOptionTile(icon: Icons.store_rounded, title: 'Digital Shop', isDark: isDark, onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogScreen(actionType: 'products', title: 'Shop Products')));
                 }),
                 
-                // ROUTED: Saved Downloads
                 _buildOptionTile(icon: Icons.bookmark_rounded, title: 'Saved Downloads', isDark: isDark, onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadsScreen()));
                 }),
 
-                _buildOptionTile(icon: Icons.notifications_rounded, title: 'Notifications', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.notifications_rounded, title: 'Notifications', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                }),
                 
-                // ROUTED: Security Screen
                 _buildOptionTile(icon: Icons.security_rounded, title: 'Security', isDark: isDark, onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const SecurityScreen()));
                 }),
@@ -347,7 +359,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () => themeProvider.toggleTheme(!isDark),
                 ),
                 
-                _buildOptionTile(icon: Icons.help_rounded, title: 'Help Center', isDark: isDark, onTap: () {}),
+                _buildOptionTile(icon: Icons.help_rounded, title: 'Help Center', isDark: isDark, onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen()));
+                }),
                 
                 const SizedBox(height: 10),
                 _buildOptionTile(icon: Icons.logout_rounded, title: 'Log Out', isDark: isDark, isLogout: true, trailing: const SizedBox(), onTap: _handleLogout),

@@ -85,7 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Text(
                       page['title']!,
                       style: const TextStyle(
-                        fontSize: 48, 
+                        fontSize: 34, 
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -1.0,
