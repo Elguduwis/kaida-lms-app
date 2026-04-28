@@ -54,15 +54,12 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
     }
   }
 
-  // --- HTML Stripper ---
   String _stripHtml(String htmlString) {
     return htmlString.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), '').trim();
   }
 
-  // --- Live FAQ Filter ---
   Map<String, List<dynamic>> get _filteredFaqs {
     if (_searchQuery.isEmpty) return _faqs;
-    
     Map<String, List<dynamic>> filtered = {};
     final query = _searchQuery.toLowerCase();
     
@@ -72,18 +69,13 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
         final aText = _stripHtml(q['answer']?.toString() ?? '').toLowerCase();
         return qText.contains(query) || aText.contains(query);
       }).toList();
-      
-      if (matches.isNotEmpty) {
-        filtered[category] = matches;
-      }
+      if (matches.isNotEmpty) filtered[category] = matches;
     });
     return filtered;
   }
 
-  // --- MailTo Intent Fix ---
   Future<void> _launchUrl(String urlString, {bool isEmail = false}) async {
     if (urlString.isEmpty) return;
-    
     try {
       if (isEmail) {
         final Uri emailUri = Uri(scheme: 'mailto', path: urlString);
@@ -93,9 +85,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open application.')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open application.')));
     }
   }
 
@@ -106,11 +96,14 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Perfected UI Header
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text('Help Center', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
-        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppTheme.primaryColor,
@@ -118,10 +111,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
           labelColor: AppTheme.primaryColor,
           unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
           labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          tabs: const [
-            Tab(text: 'FAQ'),
-            Tab(text: 'Contact Us'),
-          ],
+          tabs: const [Tab(text: 'FAQ'), Tab(text: 'Contact Us')],
         ),
       ),
       body: _isLoading 
@@ -138,10 +128,8 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
 
   Widget _buildFaqTab(bool isDark) {
     final displayedFaqs = _filteredFaqs;
-
     return Column(
       children: [
-        // --- Introduced Search Bar ---
         Padding(
           padding: const EdgeInsets.all(20),
           child: TextField(
@@ -158,7 +146,6 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
             onChanged: (val) => setState(() => _searchQuery = val),
           ),
         ),
-        
         Expanded(
           child: displayedFaqs.isEmpty
             ? Center(child: Text("No results found.", style: TextStyle(color: Colors.grey.shade500)))
@@ -175,10 +162,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          category.toUpperCase(), 
-                          style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.2)
-                        ),
+                        Text(category.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.2)),
                         const SizedBox(height: 12),
                         ...questions.map((q) => _buildFaqTile(q['question'] ?? '', q['answer'] ?? '', isDark)).toList(),
                       ],
@@ -194,7 +178,6 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
   Widget _buildFaqTile(String rawQuestion, String rawAnswer, bool isDark) {
     final cleanQuestion = _stripHtml(rawQuestion);
     final cleanAnswer = _stripHtml(rawAnswer);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -208,17 +191,11 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
         child: ExpansionTile(
           iconColor: AppTheme.primaryColor,
           collapsedIconColor: isDark ? Colors.white : Colors.grey.shade600,
-          title: Text(
-            cleanQuestion, 
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: isDark ? Colors.white : Colors.black87)
-          ),
+          title: Text(cleanQuestion, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: isDark ? Colors.white : Colors.black87)),
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Text(
-                cleanAnswer, 
-                style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 14, height: 1.5)
-              ),
+              child: Text(cleanAnswer, style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 14, height: 1.5)),
             ),
           ],
         ),
@@ -233,8 +210,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.support_agent_rounded, size: 80, color: AppTheme.primaryColor),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10), 
           Text('How can we help you?', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
           const SizedBox(height: 8),
           Text(
@@ -248,7 +224,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
             title: 'Email Us',
             subtitle: _contactInfo['email'] ?? 'support@kainuwa.africa',
             icon: Icons.email_rounded,
-            iconColor: Colors.redAccent,
+            iconColor: AppTheme.primaryColor,
             isDark: isDark,
             onTap: () => _launchUrl(_contactInfo['email'] ?? '', isEmail: true),
           ),
@@ -258,7 +234,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
               title: 'Facebook',
               subtitle: 'Follow our page',
               icon: FontAwesomeIcons.facebook,
-              iconColor: Colors.blue.shade700,
+              iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['facebook']!),
             ),
@@ -268,7 +244,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
               title: 'X (Twitter)',
               subtitle: 'Send us a direct message',
               icon: FontAwesomeIcons.xTwitter,
-              iconColor: isDark ? Colors.white : Colors.black,
+              iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['twitter']!),
             ),
@@ -278,7 +254,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
               title: 'Instagram',
               subtitle: 'See our latest updates',
               icon: FontAwesomeIcons.instagram,
-              iconColor: Colors.purple.shade400,
+              iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['instagram']!),
             ),

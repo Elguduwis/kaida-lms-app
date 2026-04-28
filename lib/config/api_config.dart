@@ -21,4 +21,6 @@ class ApiConfig {
   static const String locations = '$baseUrl/locations.php';
   static const String checkUsername = '$baseUrl/check_username.php';
   static const String helpCenter = '$baseUrl/help_center_data.php';
+  static const String getProfileDetails = '$baseUrl/get_profile_details.php';
+  static const String updateProfile = '$baseUrl/update_profile.php';
 }
