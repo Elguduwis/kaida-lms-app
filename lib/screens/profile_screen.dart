@@ -272,7 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
                     child: Text('ADMINISTRATOR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-                  _buildOptionTile(icon: Icons.admin_panel_settings_rounded, title: 'Admin Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Admin Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/admin/dashboard'))); }),
+                  _buildOptionTile(icon: Icons.admin_panel_settings_rounded, title: 'Admin Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Admin Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=%2Fswitch_view.php%3Fview%3Dadmin'))); }),
                   const SizedBox(height: 10),
                 ],
 
@@ -281,7 +281,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
                     child: Text('INSTRUCTOR', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-                  _buildOptionTile(icon: Icons.dashboard_customize_rounded, title: 'Instructor Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Instructor Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/instructor/dashboard'))); }),
+                  _buildOptionTile(icon: Icons.dashboard_customize_rounded, title: 'Instructor Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Instructor Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=%2Fswitch_view.php%3Fview%3Dinstructor'))); }),
                   const SizedBox(height: 10),
                 ],
 
@@ -290,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
                     child: Text('AFFILIATE', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
                   ),
-                  _buildOptionTile(icon: Icons.campaign_rounded, title: 'Affiliate Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Affiliate Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=/affiliate/dashboard'))); }),
+                  _buildOptionTile(icon: Icons.campaign_rounded, title: 'Affiliate Dashboard', isDark: isDark, onTap: () { Navigator.push(context, MaterialPageRoute(builder: (_) => WebViewScreen(title: 'Affiliate Dashboard', url: 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=%2Fswitch_view.php%3Fview%3Daffiliate'))); }),
                   const SizedBox(height: 10),
                 ],
 
