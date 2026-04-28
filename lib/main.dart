@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'config/app_theme.dart';
 import 'config/theme_provider.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/main_layout.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,12 +14,13 @@ void main() async {
 
   Widget initialScreen;
   if (token != null && token.isNotEmpty) {
-    initialScreen = const MainLayout();
+    // User is logged in -> Show the minimalist Splash Screen
+    initialScreen = const SplashScreen();
   } else {
+    // User is NOT logged in -> Bypass Splash and go directly to Onboarding
     initialScreen = const OnboardingScreen();
   }
 
-  // CRITICAL FIX: Restored ChangeNotifierProvider so ProfileScreen can access the Theme
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -40,7 +41,7 @@ class KaidaApp extends StatelessWidget {
     return MaterialApp(
       title: 'Kainuwa Academy',
       debugShowCheckedModeBanner: false,
-      themeMode: themeProvider.themeMode, // Actively listens to the Dark Mode toggle
+      themeMode: themeProvider.themeMode, 
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       home: initialScreen,
