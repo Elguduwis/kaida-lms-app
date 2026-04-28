@@ -161,7 +161,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               DropdownButtonFormField<String>(
                 value: value,
                 isExpanded: true,
-                menuMaxHeight: 250, // FIX: Forces the menu to scroll if it gets too long
+                menuMaxHeight: 500, // INCREASED HEIGHT: Allows 9-10 items to be seen and scrolled at once.
                 dropdownColor: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                 style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.w500),
                 icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade400),
