@@ -63,7 +63,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (_userId != null) {
       _loadSessions();
     } else {
-      _messages.add(ChatMessage(text: "Please log in to chat with Kaida AI.", isUser: false));
+      _messages.add(ChatMessage(text: "Please log in to chat with Kainuwa AI.", isUser: false));
       setState(() {});
     }
   }
@@ -198,14 +198,14 @@ class _AiChatScreenState extends State<AiChatScreen> {
       }
     } on TimeoutException {
       setState(() {
-        _messages.add(ChatMessage(text: "Kaida AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
+        _messages.add(ChatMessage(text: "Kainuwa AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
     } catch (e) {
       setState(() {
         if (e.toString().contains("SERVER_HTML_TIMEOUT")) {
-           _messages.add(ChatMessage(text: "Kaida AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
+           _messages.add(ChatMessage(text: "Kainuwa AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
         } else {
            _messages.add(ChatMessage(text: "Network error. Please check your connection and try again.", isUser: false));
         }
@@ -240,7 +240,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           children: const [
             Icon(Icons.auto_awesome, color: Colors.white, size: 20),
             SizedBox(width: 8),
-            Text('Kaida AI', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+            Text('Kainuwa AI', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
           ],
         ),
         centerTitle: true,
@@ -309,7 +309,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Text('Kaida AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+                  child: const Text('Kainuwa AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
               ),
             ),
@@ -363,7 +363,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildWelcomeScreen(bool isDark) {
-    String welcomeTitle = _selectedLanguage == 'Hausa' ? 'Barka da zuwa Kaida AI' : 'Welcome to Kaida AI';
+    String welcomeTitle = _selectedLanguage == 'Hausa' ? 'Barka da zuwa Kainuwa AI' : 'Welcome to Kainuwa AI';
     String welcomeSub = _selectedLanguage == 'Hausa' 
         ? 'Zan iya taimaka muku gano hanyarku, zabi kwasoshin da suka dace, da kuma koyon yadda zaku sami kudi da fasaharku.' 
         : 'I can help you discover your path, choose the right courses, and learn how to monetize your skills.';
@@ -533,7 +533,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   maxLines: 3,
                   minLines: 1,
                   decoration: InputDecoration(
-                    hintText: 'Message Kaida AI...',
+                    hintText: 'Message Kainuwa AI...',
                     hintStyle: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

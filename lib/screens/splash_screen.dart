@@ -84,8 +84,8 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             content: Text(
               isForced 
-                ? 'A critical update is required to continue using Kaida Learn. Please update to the latest version to ensure peak performance and security.'
-                : 'A new version of Kaida Learn is available with new features and improvements. Would you like to update now?',
+                ? 'A critical update is required to continue using Kainuwa Academy. Please update to the latest version to ensure peak performance and security.'
+                : 'A new version of Kainuwa Academy is available with new features and improvements. Would you like to update now?',
               style: const TextStyle(fontSize: 15, height: 1.5),
             ),
             actions: [
@@ -145,7 +145,7 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Image.asset('assets/images/app_icon.png', width: 80, height: 80),
             ),
             const SizedBox(height: 24),
-            const Text('Kaida Learn', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+            const Text('Kainuwa Academy', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
             const SizedBox(height: 40),
             const SizedBox(
               width: 30, height: 30,

@@ -18,7 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<Map<String, String>> _pages = [
     {
       'type': 'welcome',
-      'title': 'Kaida Learn',
+      'title': 'Kainuwa Academy',
       'subtitle': '',
     },
     {

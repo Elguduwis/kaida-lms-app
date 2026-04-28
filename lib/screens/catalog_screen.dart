@@ -54,7 +54,7 @@ class CatalogItem {
       price: double.tryParse(json['price'].toString()) ?? 0.0,
       discountPrice: double.tryParse(json['discount_price'].toString()) ?? 0.0,
       isFree: json['is_free'] == 1 || json['is_free'] == true || json['is_free'] == '1',
-      instructorName: json['instructor_name'] ?? json['author_name'] ?? 'Kaida Instructor',
+      instructorName: json['instructor_name'] ?? json['author_name'] ?? 'Kainuwa Instructor',
       categoryName: json['category_name'] ?? 'General',
       language: json['language'] ?? 'EN',
       type: itemType,

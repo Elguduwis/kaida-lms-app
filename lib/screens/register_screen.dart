@@ -448,7 +448,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Text('Create Account', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                 const SizedBox(height: 8),
-                Text('Sign up to start learning with Kaida Learn', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
+                Text('Sign up to start learning with Kainuwa Academy', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
                 const SizedBox(height: 40),
                 
                 _buildCustomInput(icon: Icons.person_rounded, label: 'Full Name', controller: _fullNameController, isDark: isDark),

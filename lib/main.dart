@@ -38,7 +38,7 @@ class KaidaApp extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
     
     return MaterialApp(
-      title: 'Kaida Learn',
+      title: 'Kainuwa Academy',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.themeMode, // Actively listens to the Dark Mode toggle
       theme: AppTheme.lightTheme,

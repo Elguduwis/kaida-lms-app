@@ -32,7 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _avatarUrl;
   String _walletBalance = "0.00";
   
-  String _shareMessage = "Join me on Kaida Learn! Start building your future today.";
+  String _shareMessage = "Join me on Kainuwa Academy! Start building your future today.";
   String _shareUrl = "https://play.google.com/store/apps/details?id=com.kainuwa.academy";
   
   bool _isLoading = true;

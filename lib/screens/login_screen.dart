@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sign in to continue to Kaida Learn', 
+                  'Sign in to continue to Kainuwa Academy', 
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade500)
                 ),
