@@ -9,7 +9,6 @@ import '../config/app_theme.dart';
 import 'catalog_screen.dart';
 import 'item_details_screen.dart';
 
-// Modified to handle error states natively
 class ChatMessage {
   final String text;
   final bool isUser;
@@ -36,9 +35,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   
   bool _isTyping = false;
   bool _isLoadingHistory = false;
-  String _lastFailedPrompt = ''; // Tracks the prompt for the Retry button
-  
-  // String _selectedLanguage = 'English'; // Disabled Hausa for now
+  String _lastFailedPrompt = ''; 
   
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -58,9 +55,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final prefs = await SharedPreferences.getInstance();
     _userId = prefs.getInt('user_id');
     if (_userId != null) {
-      _loadSessions();
+      await _loadSessions();
     } else {
-      setState(() => _messages.add(ChatMessage(text: "Please log in to chat with Kaida AI.", isUser: false)));
+      setState(() => _messages.add(ChatMessage(text: "Please log in to chat with Kainuwa AI.", isUser: false)));
     }
   }
 
@@ -69,7 +66,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
       final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/ai_chat.php?action=get_sessions&user_id=$_userId'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success') setState(() => _sessions = List<Map<String, dynamic>>.from(data['data']));
+        if (data['status'] == 'success' && mounted) {
+          setState(() => _sessions = List<Map<String, dynamic>>.from(data['data']));
+        }
       }
     } catch (e) {
       debugPrint("Failed to load sessions.");
@@ -83,13 +82,16 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _messages.clear();
       _currentSuggestions.clear();
     });
-    Navigator.pop(context); 
+    
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+      Navigator.pop(context); 
+    }
 
     try {
       final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/ai_chat.php?action=get_history&session_id=$sessionId&user_id=$_userId'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success' && data['data'] != null) {
+        if (data['status'] == 'success' && data['data'] != null && mounted) {
           List<ChatMessage> loaded = [];
           for (var msg in data['data']) {
             String text = msg['message'].toString();
@@ -106,10 +108,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         }
       }
     } catch (e) {
-      setState(() {
-        _isLoadingHistory = false;
-        _messages.add(ChatMessage(text: "Could not load history.", isUser: false));
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingHistory = false;
+          _messages.add(ChatMessage(text: "Could not load history.", isUser: false));
+        });
+      }
     }
   }
 
@@ -121,7 +125,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       );
       if (response.statusCode == 200) {
         if (_currentSessionId == sessionId) _startNewChat();
-        else _loadSessions();
+        else await _loadSessions();
       }
     } catch (e) {
       debugPrint("Failed to delete session.");
@@ -144,17 +148,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     _textController.clear();
     setState(() {
-      // Remove any previous error bubbles before sending the new request
       _messages.removeWhere((m) => m.isError);
-      
-      // If it's not a retry, add the user's bubble to the screen
-      if (!isRetry) {
-        _messages.add(ChatMessage(text: text, isUser: true));
-      }
+      if (!isRetry) _messages.add(ChatMessage(text: text, isUser: true));
       
       _currentSuggestions.clear();
       _isTyping = true;
-      _lastFailedPrompt = text; // Save this in case the API fails
+      _lastFailedPrompt = text; 
     });
     _scrollToBottom();
 
@@ -165,7 +164,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'user_id': _userId.toString(),
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
-          'language': 'English', // Hausa temporarily disabled
         },
       ).timeout(const Duration(seconds: 95));
 
@@ -183,31 +181,32 @@ class _AiChatScreenState extends State<AiChatScreen> {
             }
           }
 
-          setState(() {
-            _currentSessionId = int.tryParse(data['session_id'].toString());
-            _messages.add(ChatMessage(text: replyText, isUser: false));
-            _currentSuggestions = suggestions;
-            _isTyping = false;
-          });
-          _scrollToBottom();
-          
-          if (_sessions.isEmpty || _sessions.first['id'].toString() != _currentSessionId.toString()) {
-            _loadSessions(); 
+          if (mounted) {
+            setState(() {
+              _currentSessionId = int.tryParse(data['session_id'].toString());
+              _messages.add(ChatMessage(text: replyText, isUser: false));
+              _currentSuggestions = suggestions;
+              _isTyping = false;
+            });
+            _scrollToBottom();
+            
+            // INSTANT SYNC: Force the history to reload so it appears in the drawer immediately
+            await _loadSessions();
           }
         } else {
-          // Trigger the retry button explicitly
           throw Exception(data['message'] ?? "Error");
         }
       } else {
         throw Exception("Server Error");
       }
     } catch (e) {
-      setState(() {
-        // Appends the Retry button bubble
-        _messages.add(ChatMessage(text: "Kaida AI connection failed. Tap retry.", isUser: false, isError: true));
-        _isTyping = false;
-      });
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(text: "Kainuwa AI connection failed. Tap retry.", isUser: false, isError: true));
+          _isTyping = false;
+        });
+        _scrollToBottom();
+      }
     }
   }
 
@@ -238,7 +237,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           children: [
             const Icon(Icons.auto_awesome, color: AppTheme.primaryColor, size: 22),
             const SizedBox(width: 8),
-            Text('Kaida AI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: 18)),
+            Text('Kainuwa AI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: 18)),
           ],
         ),
         actions: [
@@ -271,7 +270,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: isDark ? AppTheme.darkSurfaceColor : Colors.white, borderRadius: BorderRadius.circular(16)),
-                  child: const Text('Kaida AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+                  child: const Text('Kainuwa AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
               ),
             ),
@@ -308,11 +307,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
       child: SafeArea(
         child: Column(
           children: [
+            // FIXED: Removed the solid purple background to match standard theme
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
-              color: AppTheme.primaryColor,
-              child: const Text('Chat History', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              color: Colors.transparent,
+              child: Text('Chat History', style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
             ),
             ListTile(
               leading: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
@@ -331,8 +331,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         leading: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         title: Text(session['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                         onTap: () => _loadHistory(int.parse(session['id'].toString())),
+                        // FIXED: Swapped the delete bin for a clean 'X' icon
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                          icon: const Icon(Icons.close, color: Colors.red, size: 20),
                           onPressed: () => _deleteSession(int.parse(session['id'].toString())),
                         ),
                       );
@@ -358,33 +359,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
               child: const Icon(Icons.auto_awesome, size: 48, color: AppTheme.primaryColor),
             ),
             const SizedBox(height: 24),
-            Text('Welcome to Kaida AI', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
+            Text('Welcome to Kainuwa AI', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
             const SizedBox(height: 12),
             Text('I can help you discover your path, choose the right courses, and learn how to monetize your skills.', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5)),
-            
-            // --- LANGUAGE SELECTOR TEMPORARILY COMMENTED OUT ---
-            /*
-            const SizedBox(height: 40),
-            Text('Select Preferred Language:', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: ['English', 'Hausa'].map((lang) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6.0),
-                child: ChoiceChip(
-                  label: Text(lang, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  selected: _selectedLanguage == lang,
-                  selectedColor: AppTheme.primaryColor,
-                  backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                  labelStyle: TextStyle(color: _selectedLanguage == lang ? Colors.white : (isDark ? Colors.white : Colors.black)),
-                  onSelected: (selected) {
-                    if (selected) setState(() => _selectedLanguage = lang);
-                  },
-                ),
-              )).toList(),
-            ),
-            */
-
             const SizedBox(height: 40),
             Wrap(
               spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
@@ -407,7 +384,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessage message, bool isDark) {
-    // --- SPECIAL UI FOR ERROR/RETRY BUBBLES ---
     if (message.isError) {
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -478,7 +454,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                               final slug = href.replaceAll('kaida://course/', '');
                               showDialog(context: context, barrierDismissible: false, builder: (BuildContext c) => const Center(child: CircularProgressIndicator()));
                               try {
-                                final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'));
+                                final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/catalog.php?action=courses'));
                                 Navigator.pop(context); 
                                 if (response.statusCode == 200) {
                                   final data = json.decode(response.body);
@@ -528,7 +504,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   maxLines: 3,
                   minLines: 1,
                   decoration: InputDecoration(
-                    hintText: 'Message Kaida AI...',
+                    hintText: 'Message Kainuwa AI...',
                     hintStyle: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
