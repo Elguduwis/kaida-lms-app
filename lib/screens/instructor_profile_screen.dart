@@ -63,162 +63,256 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Initial fallback data from previous screen
     String avatarUrl = _formatUrl(widget.instructor['avatar_url']);
     String name = widget.instructor['name'] ?? 'Instructor';
     String coverUrl = '';
-    String headline = 'Professional Instructor';
+    String headline = '';
     String bio = '';
+    bool isVerified = false;
+    int totalStudents = 0;
+    int totalReviews = 0;
+    int totalCourses = 0;
 
-    // Swap to full data once loaded
     if (_fullDetails != null) {
       avatarUrl = _formatUrl(_fullDetails!['avatar_url']);
       coverUrl = _formatUrl(_fullDetails!['cover_photo_url']);
       name = _fullDetails!['full_name'] ?? _fullDetails!['username'] ?? name;
-      headline = _fullDetails!['headline'] ?? headline;
+      headline = _fullDetails!['headline'] ?? '';
       bio = _fullDetails!['bio'] ?? '';
+      isVerified = _fullDetails!['is_verified_instructor'] == 1 || _fullDetails!['is_verified_instructor'] == '1';
+      totalStudents = int.tryParse(_fullDetails!['total_students']?.toString() ?? '0') ?? 0;
+      totalReviews = int.tryParse(_fullDetails!['total_reviews']?.toString() ?? '0') ?? 0;
+      totalCourses = int.tryParse(_fullDetails!['total_courses']?.toString() ?? '0') ?? 0;
     }
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       body: _isLoading 
         ? const Center(child: KaidaLoader())
-        : CustomScrollView(
+        : SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            slivers: [
-              // --- CINEMATIC BANNER ---
-              SliverAppBar(
-                expandedHeight: 200.0,
-                pinned: true,
-                backgroundColor: AppTheme.primaryColor,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                flexibleSpace: FlexibleSpaceBar(
-                  background: coverUrl.isNotEmpty
-                      ? CachedNetworkImage(imageUrl: coverUrl, fit: BoxFit.cover)
-                      : Container(color: AppTheme.primaryColor),
-                ),
-              ),
-              
-              // --- INSTRUCTOR INFO ---
-              SliverToBoxAdapter(
-                child: Transform.translate(
-                  offset: const Offset(0, -50),
-                  child: Column(
-                    children: [
-                      // Overlapping Avatar
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppTheme.darkBackgroundColor : Colors.white, 
-                          shape: BoxShape.circle
+            child: Column(
+              children: [
+                // --- FIXED COVER & AVATAR STACK ---
+                Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    // Cover Photo
+                    Container(
+                      height: 220,
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 60), // Space for overlapping avatar
+                      decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.2)),
+                      child: coverUrl.isNotEmpty
+                          ? CachedNetworkImage(imageUrl: coverUrl, fit: BoxFit.cover)
+                          : const Center(child: Icon(Icons.image, size: 60, color: Colors.white54)),
+                    ),
+                    // Back Button (Safe Area)
+                    Positioned(
+                      top: 40,
+                      left: 16,
+                      child: GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+                          child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
                         ),
+                      ),
+                    ),
+                    // Overlapping Avatar Guaranteed on Top
+                    Positioned(
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: isDark ? AppTheme.darkBackgroundColor : Colors.white, shape: BoxShape.circle),
                         child: CircleAvatar(
-                          radius: 50,
+                          radius: 55,
                           backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
                           backgroundImage: avatarUrl.isNotEmpty ? CachedNetworkImageProvider(avatarUrl) : null,
-                          child: avatarUrl.isEmpty ? const Icon(Icons.person_rounded, size: 50, color: AppTheme.primaryColor) : null,
+                          child: avatarUrl.isEmpty ? const Icon(Icons.person_rounded, size: 55, color: AppTheme.primaryColor) : null,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      
-                      Text(name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                      const SizedBox(height: 4),
-                      
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(headline, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600, fontSize: 14)),
-                      ),
-                      
-                      if (bio.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            bio, 
-                            textAlign: TextAlign.center, 
-                            style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5, fontSize: 14)
+                    ),
+                  ],
+                ),
+                
+                // --- INSTRUCTOR INFO & STATS ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(name, textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                           ),
-                        ),
-                      ],
-                      
-                      const SizedBox(height: 30),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Instructor Courses (${_courses.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        ),
+                          if (isVerified) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.verified, color: AppTheme.primaryColor, size: 22),
+                          ]
+                        ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 6),
+                      
+                      if (headline.isNotEmpty)
+                        Text(headline, textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600, fontSize: 15)),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // STATS ROW
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatItem(totalStudents.toString(), 'Students', isDark),
+                          _buildStatDivider(isDark),
+                          _buildStatItem(totalReviews.toString(), 'Reviews', isDark),
+                          _buildStatDivider(isDark),
+                          _buildStatItem(totalCourses.toString(), 'Courses', isDark),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      if (bio.isNotEmpty)
+                        Text(bio, textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.6, fontSize: 14)),
                     ],
                   ),
                 ),
-              ),
+                
+                const SizedBox(height: 20),
+                Divider(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, thickness: 8),
+                const SizedBox(height: 20),
 
-              // --- COURSE LIST ---
-              if (_courses.isEmpty)
-                SliverToBoxAdapter(
-                  child: Center(child: Padding(padding: const EdgeInsets.only(top: 20), child: Text("No active courses yet.", style: TextStyle(color: Colors.grey.shade500)))),
-                )
-              else
-                SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final course = _courses[index];
-                      return Transform.translate(
-                        offset: const Offset(0, -50),
-                        child: _buildCourseCard(course, isDark, context),
-                      );
-                    },
-                    childCount: _courses.length,
+                // --- COURSES LIST ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Instructor Courses', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                   ),
                 ),
+                const SizedBox(height: 16),
                 
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
+                if (_courses.isEmpty)
+                  Padding(padding: const EdgeInsets.all(20), child: Center(child: Text("No active courses yet.", style: TextStyle(color: Colors.grey.shade500))))
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _courses.length,
+                    itemBuilder: (context, index) {
+                      return _buildCatalogStyleCourseCard(_courses[index], isDark, context);
+                    },
+                  ),
+                  
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
     );
   }
 
-  Widget _buildCourseCard(CatalogItem item, bool isDark, BuildContext context) {
+  Widget _buildStatItem(String value, String label, bool isDark) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildStatDivider(bool isDark) {
+    return Container(
+      height: 30, width: 1,
+      color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+    );
+  }
+
+  // EXACT REPLICA OF THE CATALOG/HOME SCREEN CARD
+  Widget _buildCatalogStyleCourseCard(CatalogItem item, bool isDark, BuildContext context) {
+    int discountPercent = 0;
+    if (item.price > 0 && item.discountPrice > 0 && item.discountPrice < item.price) {
+      discountPercent = (((item.price - item.discountPrice) / item.price) * 100).round();
+    }
+
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: item))),
       child: Container(
-        margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+        width: double.infinity, 
+        margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: isDark ? Colors.black12 : Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)),
-              child: item.thumbnailUrl.isNotEmpty
-                  ? CachedNetworkImage(imageUrl: item.thumbnailUrl, width: 110, height: 110, fit: BoxFit.cover)
-                  : Container(width: 110, height: 110, color: AppTheme.primaryColor.withOpacity(0.1), child: const Icon(Icons.school_rounded, color: AppTheme.primaryColor)),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 4),
-                    Text(item.title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 8),
-                    if (item.isFree || (item.price == 0 && item.discountPrice == 0))
-                      const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
-                    else if (item.discountPrice > 0 && item.discountPrice < item.price)
-                      Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppTheme.primaryColor))
-                    else
-                      Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppTheme.primaryColor)),
-                  ],
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: item.thumbnailUrl.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 160, width: double.infinity, fit: BoxFit.cover)
+                      : Container(height: 160, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
+                if (discountPercent > 0)
+                  Positioned(
+                    top: 10, left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
+                      child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                        child: Text(item.language.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(item.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, height: 1.3, color: isDark ? Colors.white : Colors.black), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.person_rounded, size: 16, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Expanded(child: Text(item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (item.isFree || (item.price == 0 && item.discountPrice == 0))
+                    const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16))
+                  else if (item.discountPrice > 0 && item.discountPrice < item.price)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('₦${item.discountPrice.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppTheme.primaryColor)),
+                        const SizedBox(width: 8),
+                        Text('₦${item.price.toStringAsFixed(0)}', style: TextStyle(decoration: TextDecoration.lineThrough, color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w600)),
+                      ],
+                    )
+                  else
+                    Text('₦${item.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppTheme.primaryColor)),
+                ],
               ),
             ),
           ],
