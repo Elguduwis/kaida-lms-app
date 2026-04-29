@@ -24,4 +24,5 @@ class ApiConfig {
   static const String getProfileDetails = '$baseUrl/get_profile_details.php';
   static const String updateProfile = '$baseUrl/update_profile.php';
   static const String categories = '$baseUrl/categories.php';
+  static const String getInstructor = '$baseUrl/get_instructor.php';
 }
