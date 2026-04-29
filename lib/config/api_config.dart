@@ -23,4 +23,5 @@ class ApiConfig {
   static const String helpCenter = '$baseUrl/help_center_data.php';
   static const String getProfileDetails = '$baseUrl/get_profile_details.php';
   static const String updateProfile = '$baseUrl/update_profile.php';
+  static const String categories = '$baseUrl/categories.php';
 }
