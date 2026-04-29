@@ -31,13 +31,31 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         if (data['status'] == 'success' && mounted) {
           setState(() {
             _categories = data['data'];
-            _isLoading = false;
           });
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint("Categories Fetch Error: $e");
+    } finally {
+      // FIX: Ensure the loading spinner always stops, regardless of success or error
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  // Assigns a native Flutter icon based on the category name
+  IconData _getIconForCategory(String name) {
+    final lowerName = name.toLowerCase();
+    if (lowerName.contains('design')) return Icons.brush_rounded;
+    if (lowerName.contains('code') || lowerName.contains('development') || lowerName.contains('tech')) return Icons.code_rounded;
+    if (lowerName.contains('business') || lowerName.contains('finance')) return Icons.business_center_rounded;
+    if (lowerName.contains('market')) return Icons.campaign_rounded;
+    if (lowerName.contains('photo') || lowerName.contains('video')) return Icons.camera_alt_rounded;
+    if (lowerName.contains('health')) return Icons.favorite_rounded;
+    if (lowerName.contains('music') || lowerName.contains('audio')) return Icons.music_note_rounded;
+    if (lowerName.contains('language')) return Icons.language_rounded;
+    return Icons.category_rounded; // Default fallback
   }
 
   @override
@@ -58,27 +76,28 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       body: _isLoading
           ? const Center(child: KaidaLoader())
           : _categories.isEmpty
-              ? const Center(child: Text("No categories found."))
+              ? Center(child: Text("No categories found.", style: TextStyle(color: Colors.grey.shade500)))
               : ListView.separated(
                   padding: const EdgeInsets.all(20),
                   itemCount: _categories.length,
                   separatorBuilder: (_, __) => Divider(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
                   itemBuilder: (context, index) {
                     final cat = _categories[index];
+                    final catName = cat['name'] ?? 'Category';
+                    
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), shape: BoxShape.circle),
-                        child: const Icon(Icons.category_rounded, color: AppTheme.primaryColor),
+                        child: Icon(_getIconForCategory(catName), color: AppTheme.primaryColor),
                       ),
-                      title: Text(cat['name'] ?? 'Category', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      title: Text(catName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
                       onTap: () {
-                        // Immediately routes to CatalogScreen and dynamically fetches matched courses
                         Navigator.push(context, MaterialPageRoute(builder: (_) => CatalogScreen(
                           actionType: 'category_${cat['id']}', 
-                          title: cat['name']
+                          title: catName
                         )));
                       },
                     );
