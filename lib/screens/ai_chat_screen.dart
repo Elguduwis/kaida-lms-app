@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import 'catalog_screen.dart';
 import 'item_details_screen.dart';
@@ -30,6 +29,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   
   List<ChatMessage> _messages = [];
   List<Map<String, dynamic>> _sessions = [];
+  List<String> _currentSuggestions = []; // Holds the AI's smart follow-up guesses
+  
   bool _isTyping = false;
   bool _isLoadingHistory = false;
   String _selectedLanguage = 'English'; 
@@ -40,14 +41,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
     'English': [
       'I don\'t know what to learn. Help me!',
       'Suggest a course for beginners.',
-      'How do I monetize my skills?',
-      'What are my career options?'
+      'How do I monetize my skills?'
     ],
     'Hausa': [
       'Ban san abin da zan koya ba. Taimake ni!',
       'Ba ni shawarar kwas ga masu fara koyo.',
-      'Ta yaya zan sami kudi da fasahata?',
-      'Wadanne damar aiki nake da su?'
+      'Ta yaya zan sami kudi da fasahata?'
     ]
   };
 
@@ -63,8 +62,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     if (_userId != null) {
       _loadSessions();
     } else {
-      _messages.add(ChatMessage(text: "Please log in to chat with Kainuwa AI.", isUser: false));
-      setState(() {});
+      setState(() => _messages.add(ChatMessage(text: "Please log in to chat with Kaida AI.", isUser: false)));
     }
   }
 
@@ -73,11 +71,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=get_sessions&user_id=$_userId'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['status'] == 'success') {
-          setState(() {
-            _sessions = List<Map<String, dynamic>>.from(data['data']);
-          });
-        }
+        if (data['status'] == 'success') setState(() => _sessions = List<Map<String, dynamic>>.from(data['data']));
       }
     } catch (e) {
       debugPrint("Failed to load sessions.");
@@ -89,18 +83,21 @@ class _AiChatScreenState extends State<AiChatScreen> {
       _isLoadingHistory = true;
       _currentSessionId = sessionId;
       _messages.clear();
+      _currentSuggestions.clear();
     });
     Navigator.pop(context); 
 
     try {
-      // CRITICAL FIX: Appended &user_id=$_userId so the server actually returns the data!
       final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=get_history&session_id=$sessionId&user_id=$_userId'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && data['data'] != null) {
           List<ChatMessage> loaded = [];
           for (var msg in data['data']) {
-            loaded.add(ChatMessage(text: msg['message'].toString(), isUser: msg['role'] == 'user'));
+            String text = msg['message'].toString();
+            // Clean out historic suggestions so they don't look ugly in history
+            if (text.contains('||')) text = text.split('||')[0].trim();
+            loaded.add(ChatMessage(text: text, isUser: msg['role'] == 'user'));
           }
           setState(() {
             _messages = loaded;
@@ -108,13 +105,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
           });
           _scrollToBottom();
         } else {
-          throw Exception(data['message'] ?? "Unknown load error");
+          throw Exception("Unknown load error");
         }
       }
     } catch (e) {
       setState(() {
         _isLoadingHistory = false;
-        _messages.add(ChatMessage(text: "Could not load history. Details: ${e.toString()}", isUser: false));
+        _messages.add(ChatMessage(text: "Could not load history.", isUser: false));
       });
     }
   }
@@ -123,17 +120,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
     try {
       final response = await http.post(
         Uri.parse('https://academy.kainuwa.africa/api/mobile/ai_chat.php?action=delete_session'),
-        body: {
-          'user_id': _userId.toString(),
-          'session_id': sessionId.toString(),
-        },
+        body: {'user_id': _userId.toString(), 'session_id': sessionId.toString()},
       );
       if (response.statusCode == 200) {
-        if (_currentSessionId == sessionId) {
-           _startNewChat();
-        } else {
-           _loadSessions();
-        }
+        if (_currentSessionId == sessionId) _startNewChat();
+        else _loadSessions();
       }
     } catch (e) {
       debugPrint("Failed to delete session.");
@@ -144,6 +135,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     setState(() {
       _currentSessionId = null;
       _messages.clear();
+      _currentSuggestions.clear();
     });
     if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.pop(context);
@@ -156,6 +148,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _textController.clear();
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
+      _currentSuggestions.clear();
       _isTyping = true;
     });
     _scrollToBottom();
@@ -171,44 +164,41 @@ class _AiChatScreenState extends State<AiChatScreen> {
         },
       ).timeout(const Duration(seconds: 95));
 
-      if (response.statusCode == 200) {
-        if (response.body.trim().startsWith('<')) throw Exception("SERVER_HTML_TIMEOUT");
-
-        try {
-          final data = json.decode(response.body);
-          if (data['status'] == 'success') {
-            setState(() {
-              _currentSessionId = int.tryParse(data['session_id'].toString());
-              _messages.add(ChatMessage(text: data['message'].toString(), isUser: false));
-              _isTyping = false;
-            });
-            _scrollToBottom();
-            
-            if (_sessions.isEmpty || _sessions.first['id'].toString() != _currentSessionId.toString()) {
-              _loadSessions(); 
+      if (response.statusCode == 200 && !response.body.trim().startsWith('<')) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success') {
+          String replyText = data['message'].toString();
+          List<String> suggestions = [];
+          
+          // --- SMART SUGGESTION PARSER ---
+          if (replyText.contains('||')) {
+            final parts = replyText.split('||');
+            replyText = parts[0].trim(); // Everything before the first || is the main reply
+            for (int i = 1; i < parts.length; i++) {
+              if (parts[i].trim().isNotEmpty) suggestions.add(parts[i].trim());
             }
-          } else {
-            throw Exception(data['message'] ?? 'Unknown Error');
           }
-        } catch (e) {
-          throw Exception("SERVER_HTML_TIMEOUT");
+
+          setState(() {
+            _currentSessionId = int.tryParse(data['session_id'].toString());
+            _messages.add(ChatMessage(text: replyText, isUser: false));
+            _currentSuggestions = suggestions;
+            _isTyping = false;
+          });
+          _scrollToBottom();
+          
+          if (_sessions.isEmpty || _sessions.first['id'].toString() != _currentSessionId.toString()) {
+            _loadSessions(); 
+          }
+        } else {
+          throw Exception("Error");
         }
       } else {
-        throw Exception("SERVER_HTML_TIMEOUT");
+        throw Exception("Error");
       }
-    } on TimeoutException {
-      setState(() {
-        _messages.add(ChatMessage(text: "Kainuwa AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
-        _isTyping = false;
-      });
-      _scrollToBottom();
     } catch (e) {
       setState(() {
-        if (e.toString().contains("SERVER_HTML_TIMEOUT")) {
-           _messages.add(ChatMessage(text: "Kainuwa AI is currently helping many students. Please wait a moment and try asking again.", isUser: false));
-        } else {
-           _messages.add(ChatMessage(text: "Network error. Please check your connection and try again.", isUser: false));
-        }
+        _messages.add(ChatMessage(text: "Kaida AI is busy. Please wait a moment and try again.", isUser: false));
         _isTyping = false;
       });
       _scrollToBottom();
@@ -233,52 +223,22 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : const Color(0xFFF8F9FE),
+      // --- PERFECTED TRANSPARENT APP BAR ---
       appBar: AppBar(
-        backgroundColor: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
         title: Row(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('Kainuwa AI', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+          children: [
+            const Icon(Icons.auto_awesome, color: AppTheme.primaryColor, size: 22),
+            const SizedBox(width: 8),
+            Text('Kaida AI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black, fontSize: 18)),
           ],
         ),
-        centerTitle: true,
-        elevation: 0,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: Colors.black12,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedLanguage,
-                  dropdownColor: AppTheme.primaryColor,
-                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                      setState(() {
-                        _selectedLanguage = newValue;
-                      });
-                    }
-                  },
-                  items: <String>['English', 'Hausa'].map<DropdownMenuItem<String>>((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
           IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
+            icon: Icon(Icons.history_rounded, color: isDark ? Colors.white : Colors.black),
             onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
           )
         ],
@@ -305,14 +265,33 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text('Kainuwa AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+                  decoration: BoxDecoration(color: isDark ? AppTheme.darkSurfaceColor : Colors.white, borderRadius: BorderRadius.circular(16)),
+                  child: const Text('Kaida AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
               ),
             ),
+            
+          // --- SMART SUGGESTIONS TABS ---
+          if (_currentSuggestions.isNotEmpty && !_isTyping && _messages.isNotEmpty)
+            SizedBox(
+              height: 50,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                itemCount: _currentSuggestions.length,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ActionChip(
+                    label: Text(_currentSuggestions[index], style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+                    backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    onPressed: () => _handleSubmitted(_currentSuggestions[index]),
+                  ),
+                ),
+              ),
+            ),
+            
           _buildInputArea(isDark),
         ],
       ),
@@ -363,7 +342,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildWelcomeScreen(bool isDark) {
-    String welcomeTitle = _selectedLanguage == 'Hausa' ? 'Barka da zuwa Kainuwa AI' : 'Welcome to Kainuwa AI';
+    String welcomeTitle = _selectedLanguage == 'Hausa' ? 'Barka da zuwa Kaida AI' : 'Welcome to Kaida AI';
     String welcomeSub = _selectedLanguage == 'Hausa' 
         ? 'Zan iya taimaka muku gano hanyarku, zabi kwasoshin da suka dace, da kuma koyon yadda zaku sami kudi da fasaharku.' 
         : 'I can help you discover your path, choose the right courses, and learn how to monetize your skills.';
@@ -384,11 +363,29 @@ class _AiChatScreenState extends State<AiChatScreen> {
             const SizedBox(height: 24),
             Text(welcomeTitle, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            Text(
-              welcomeSub,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5),
+            Text(welcomeSub, textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5)),
+            const SizedBox(height: 40),
+            
+            // --- PROMINENT LANGUAGE SELECTOR ---
+            Text('Select Preferred Language:', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: ['English', 'Hausa'].map((lang) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                child: ChoiceChip(
+                  label: Text(lang, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  selected: _selectedLanguage == lang,
+                  selectedColor: AppTheme.primaryColor,
+                  backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                  labelStyle: TextStyle(color: _selectedLanguage == lang ? Colors.white : (isDark ? Colors.white : Colors.black)),
+                  onSelected: (selected) {
+                    if (selected) setState(() => _selectedLanguage = lang);
+                  },
+                ),
+              )).toList(),
             ),
+            
             const SizedBox(height: 40),
             Wrap(
               spacing: 10, runSpacing: 10, alignment: WrapAlignment.center,
@@ -411,12 +408,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessage message, bool isDark) {
-    final bgColor = message.isUser 
-        ? AppTheme.primaryColor 
-        : (isDark ? AppTheme.darkSurfaceColor : Colors.white);
-    final textColor = message.isUser 
-        ? Colors.white 
-        : (isDark ? Colors.white : Colors.black87);
+    final bgColor = message.isUser ? AppTheme.primaryColor : (isDark ? AppTheme.darkSurfaceColor : Colors.white);
+    final textColor = message.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87);
     final align = message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final borderRadius = BorderRadius.only(
       topLeft: const Radius.circular(20),
@@ -446,10 +439,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   decoration: BoxDecoration(
                     color: bgColor,
                     borderRadius: borderRadius,
-                    boxShadow: [
-                      if (!message.isUser)
-                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
-                    ]
+                    boxShadow: [if (!message.isUser) BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))]
                   ),
                   child: message.isUser
                       ? Text(message.text, style: TextStyle(color: textColor, fontSize: 15, height: 1.4))
@@ -467,28 +457,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           onTapLink: (text, href, title) async {
                             if (href != null && href.startsWith('kaida://course/')) {
                               final slug = href.replaceAll('kaida://course/', '');
-                              
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (BuildContext c) => const Center(child: CircularProgressIndicator()),
-                              );
-
+                              showDialog(context: context, barrierDismissible: false, builder: (BuildContext c) => const Center(child: CircularProgressIndicator()));
                               try {
                                 final response = await http.get(Uri.parse('https://academy.kainuwa.africa/api/mobile/catalog.php?action=courses'));
                                 Navigator.pop(context); 
-                                
                                 if (response.statusCode == 200) {
                                   final data = json.decode(response.body);
                                   if (data['status'] == 'success') {
                                     List<dynamic> items = data['data'];
                                     var courseData = items.firstWhere((item) => item['slug'] == slug, orElse: () => null);
-                                    
                                     if (courseData != null) {
-                                      final linkedItem = CatalogItem.fromJson(courseData, 'courses');
-                                      Navigator.push(context, MaterialPageRoute(
-                                        builder: (context) => ItemDetailsScreen(item: linkedItem)
-                                      ));
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: CatalogItem.fromJson(courseData, 'courses'))));
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Course not found or unavailable.')));
                                     }
@@ -522,10 +501,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           children: [
             Expanded(
               child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(24),
-                ),
+                decoration: BoxDecoration(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100, borderRadius: BorderRadius.circular(24)),
                 child: TextField(
                   controller: _textController,
                   style: TextStyle(color: isDark ? Colors.white : Colors.black87),
@@ -533,7 +509,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   maxLines: 3,
                   minLines: 1,
                   decoration: InputDecoration(
-                    hintText: 'Message Kainuwa AI...',
+                    hintText: 'Message Kaida AI...',
                     hintStyle: TextStyle(color: isDark ? Colors.grey.shade500 : Colors.grey.shade500),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
