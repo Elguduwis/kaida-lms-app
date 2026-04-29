@@ -1,7 +1,7 @@
-name: kaida_app
+name: kainuwa_academy
 description: Kainuwa Digital Africa LMS Mobile App
 publish_to: 'none'
-version: 3.0.1+12
+version: 3.0.1+13
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -37,10 +37,11 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/
     - assets/images/
     - assets/icons/
+    - assets/kainuwa_logo.png
   
-  # Register the offline fonts
   fonts:
     - family: Lato
       fonts:
@@ -50,14 +51,23 @@ flutter:
         - asset: assets/fonts/lato/Lato-Black.ttf
           weight: 900
 
+# PERFECTED LAUNCHER ICONS (No iOS, correct key)
 flutter_launcher_icons:
   android: "launcher_icon"
-  image_path: "assets/images/app_icon.png"
+  ios: false
+  image_path: "assets/kainuwa_logo.png"
+  min_sdk_android: 21
 
-# Updated Splash Screen: NO image, just the solid Kaida Purple
+# PERFECTED SPLASH SCREEN
 flutter_native_splash:
-  color: "#7351FF"
+  color: "#FFFFFF"
+  color_dark: "#121212"
+  image: "assets/kainuwa_logo.png"
+  image_dark: "assets/kainuwa_logo.png"
   android: true
   ios: false
   android_12:
-    color: "#7351FF"
+    image: "assets/kainuwa_logo.png"
+    image_dark: "assets/kainuwa_logo.png"
+    color: "#FFFFFF"
+    color_dark: "#121212"
