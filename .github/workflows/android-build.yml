@@ -1,4 +1,5 @@
 name: Fast Android CI
+
 on:
   push:
     branches: [ "main", "master" ]
@@ -13,10 +14,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
@@ -32,41 +34,33 @@ jobs:
         channel: 'stable'
         cache: true
         cache-key: 'flutter-:os:-:channel:-:version:-:arch:-:hash:'
-        
-    - name: Generate Platform Folders
-      run: flutter create --platforms=android .
 
-    - name: Inject App Name and Permissions
+    # WE REMOVED FLUTTER CREATE HERE SO IT DOESN'T DESTROY YOUR CUSTOM ANDROID FOLDER
+
+    - name: Activate Google Services Plugin
       run: |
-        sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-        sed -i 's/android:label="kainuwa_academy"/android:label="Kainuwa Academy"/g' android/app/src/main/AndroidManifest.xml
-        
+        # Injects the Google Services classpath into the project-level build.gradle
+        sed -i '/dependencies {/a \        classpath "com.google.gms:google-services:4.4.0"' android/build.gradle
+        # Applies the Google Services plugin to the app-level build.gradle
+        sed -i '/apply plugin: "com.android.application"/a apply plugin: "com.google.gms.google-services"' android/app/build.gradle
+
     - name: Install dependencies
       run: flutter pub get
-      
+
     - name: Generate Icons and Splash
       run: |
         flutter pub run flutter_launcher_icons
         flutter pub run flutter_native_splash:create
-        
+
     - name: Decode Keystore from Secrets
       env:
         ENCODED_KEYSTORE: ${{ secrets.KAIDA_KEY_JKS_BASE64 }}
       run: |
         echo "$ENCODED_KEYSTORE" | base64 --decode --ignore-garbage > kaida_upload_key.jks
 
-    # 🔥 NEW: Extract and print SHA-1 to GitHub Logs
-    - name: Extract SHA-1 Fingerprint
-      env:
-        STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
-      run: |
-        echo "=== YOUR SHA-1 FINGERPRINT FOR FIREBASE ==="
-        keytool -list -v -keystore kaida_upload_key.jks -alias kaida_upload_alias -storepass $STORE_PASSWORD | grep SHA1
-        echo "==========================================="
-      
     - name: Build Fast APK (Always runs)
       run: flutter build apk --release --split-per-abi
-        
+
     - name: Sign 64-bit APK (For Direct Download)
       env:
         STORE_PASSWORD: ${{ secrets.KAIDA_STORE_PASSWORD }}
@@ -74,17 +68,17 @@ jobs:
       run: |
         BUILD_TOOLS=$(ls $ANDROID_SDK_ROOT/build-tools | sort -n | tail -1)
         $ANDROID_SDK_ROOT/build-tools/$BUILD_TOOLS/apksigner sign --ks kaida_upload_key.jks --ks-pass pass:$STORE_PASSWORD --key-pass pass:$KEY_PASSWORD build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-        
+
     - name: Upload 64-bit APK
       uses: actions/upload-artifact@v4
       with:
         name: Kaida-Learn-Optimized-APK
         path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-        
+
     - name: Build App Bundle
       if: ${{ github.event.inputs.build_release == 'true' }}
       run: flutter build appbundle --release
-        
+
     - name: Strip Debug Signature and Sign Play Store Bundle
       if: ${{ github.event.inputs.build_release == 'true' }}
       env:
@@ -93,7 +87,7 @@ jobs:
       run: |
         zip -d build/app/outputs/bundle/release/app-release.aab "META-INF/*.RSA" "META-INF/*.SF" "META-INF/*.MF" || true
         jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore kaida_upload_key.jks -storepass $STORE_PASSWORD -keypass $KEY_PASSWORD build/app/outputs/bundle/release/app-release.aab kaida_upload_alias
-        
+
     - name: Upload Play Store Bundle
       if: ${{ github.event.inputs.build_release == 'true' }}
       uses: actions/upload-artifact@v4
