@@ -189,12 +189,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: _handleGoogleLogin,
                       ),
                     ),
-                    const SizedBox(width: 24),
-                    Container(
-                      height: 54, width: 54,
-                      decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200, width: 1.5)),
-                      child: IconButton(icon: const FaIcon(FontAwesomeIcons.facebook, color: Colors.blue, size: 20), onPressed: () {}),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 40),
