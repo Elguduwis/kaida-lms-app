@@ -26,6 +26,7 @@ dependencies:
   flutter_markdown: ^0.7.3
   firebase_core: ^2.24.2
   firebase_messaging: ^14.7.10
+  google_sign_in: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -41,7 +42,6 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/kainuwa_logo.png
-  
   fonts:
     - family: Lato
       fonts:
