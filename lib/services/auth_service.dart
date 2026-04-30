@@ -32,6 +32,9 @@ class AuthService {
 
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
+      // FIX: Force sign out first so the Google Account Picker ALWAYS shows up
+      await _googleSignIn.signOut();
+      
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return {'success': false, 'message': 'Sign-in aborted'};
 
@@ -49,7 +52,6 @@ class AuthService {
           await _saveUserData(data['token'], data['user_id']);
           return {'success': true, 'message': 'Login successful'};
         } else if (data['status'] == 'not_found') {
-          // Instructs UI to push to Registration Screen with pre-filled data
           return {
             'success': false, 
             'needs_registration': true, 

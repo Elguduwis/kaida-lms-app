@@ -166,6 +166,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       'state_id': _selectedStateId ?? '',
       'city_id': _selectedCityId ?? '',
       'password': _passwordController.text,
+      'auth_provider': widget.prefillEmail != null ? 'google' : 'email',
     };
 
     final result = await _authService.register(userData);
