@@ -7,8 +7,10 @@ import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 import 'login_screen.dart';
 import 'otp_verification_screen.dart';
+import 'main_layout.dart';
 
 class RegisterScreen extends StatefulWidget {
   final String? prefillEmail;
@@ -136,23 +138,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _handleRegister() async {
     FocusScope.of(context).unfocus();
     if (_fullNameController.text.isEmpty || _usernameController.text.isEmpty || _emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields')));
+      KaidaAlert.showModal(context: context, title: 'Action Required', message: 'Please fill all required fields.', isError: true);
       return;
     }
     if (_isUsernameAvailable == false) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a different username')));
+      KaidaAlert.showModal(context: context, title: 'Username Taken', message: 'That username is already taken. Please choose another one.', isError: true);
       return;
     }
     if (_selectedCountryId == null || _selectedStateId == null || _selectedCityId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please complete your location selection')));
+      KaidaAlert.showModal(context: context, title: 'Location Required', message: 'Please select your Country, State, and City.', isError: true);
       return;
     }
     if (_passwordsMatch == false) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+      KaidaAlert.showModal(context: context, title: 'Password Mismatch', message: 'Your passwords do not match. Please try again.', isError: true);
       return;
     }
     if (!_agreeTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You must agree to the Terms & Conditions')));
+      KaidaAlert.showModal(context: context, title: 'Terms Required', message: 'You must agree to the Terms & Conditions to create an account.', isError: true);
       return;
     }
     
@@ -170,14 +172,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     };
 
     final result = await _authService.register(userData);
-    if (mounted) setState(() => _isLoading = false);
 
     if (result['success']) {
       if (!mounted) return;
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => OtpVerificationScreen(email: _emailController.text.trim())));
+      if (widget.prefillEmail != null) {
+        // Bypass OTP, Login Directly, Go to Dashboard
+        await _authService.login(_emailController.text.trim(), _passwordController.text);
+        if (mounted) setState(() => _isLoading = false);
+        if (!mounted) return;
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
+      } else {
+        // Standard Email Registration -> Go to OTP
+        if (mounted) setState(() => _isLoading = false);
+        if (!mounted) return;
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => OtpVerificationScreen(email: _emailController.text.trim())));
+      }
     } else {
+      if (mounted) setState(() => _isLoading = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+      KaidaAlert.showModal(context: context, title: 'Registration Failed', message: result['message'], isError: true);
     }
   }
 

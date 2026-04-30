@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../config/app_theme.dart';
 import '../services/auth_service.dart';
 import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 import 'main_layout.dart';
 import 'register_screen.dart';
 import 'onboarding_screen.dart';
@@ -24,7 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _handleLogin() async {
     FocusScope.of(context).unfocus();
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+      KaidaAlert.showModal(context: context, title: 'Action Required', message: 'Please fill all fields.', isError: true);
       return;
     }
     
@@ -37,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+      KaidaAlert.showModal(context: context, title: 'Authentication Error', message: result['message'], isError: true);
     }
   }
 
@@ -54,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
     } else if (result['needs_registration'] == true) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please complete your profile details.')));
+      KaidaAlert.showModal(context: context, title: 'Almost There', message: 'Please complete your profile details to finish signing up.', isError: false);
       Navigator.pushReplacement(
         context, 
         MaterialPageRoute(
@@ -66,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } else {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message']), backgroundColor: Colors.red));
+      KaidaAlert.showModal(context: context, title: 'Authentication Error', message: result['message'], isError: true);
     }
   }
 
