@@ -32,42 +32,9 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^2.0.0
   flutter_launcher_icons: ^0.13.1
-  flutter_native_splash: ^2.4.7
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/
-    - assets/images/
-    - assets/icons/
-    - assets/kainuwa_logo.png
-  
-  fonts:
-    - family: Lato
-      fonts:
-        - asset: assets/fonts/lato/Lato-Regular.ttf
-        - asset: assets/fonts/lato/Lato-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/lato/Lato-Black.ttf
-          weight: 900
-
-# PERFECTED LAUNCHER ICONS (No iOS, correct key)
-flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: false
-  image_path: "assets/kainuwa_logo.png"
-  min_sdk_android: 21
-
-# PERFECTED SPLASH SCREEN
 flutter_native_splash:
-  color: "#FFFFFF"
-  color_dark: "#121212"
-  image: "assets/kainuwa_logo.png"
-  image_dark: "assets/kainuwa_logo.png"
+  color: "#7351FF"
   android: true
   ios: false
   android_12:
-    image: "assets/kainuwa_logo.png"
-    image_dark: "assets/kainuwa_logo.png"
-    color: "#FFFFFF"
-    color_dark: "#121212"
+    color: "#7351FF"
