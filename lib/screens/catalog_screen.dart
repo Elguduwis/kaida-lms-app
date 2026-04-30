@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 import 'item_details_screen.dart';
 
 class CatalogItem {
@@ -21,6 +22,7 @@ class CatalogItem {
   final String language;
   final String type;
   final bool isComingSoon;
+  final String productType; // NEW: Digital vs Physical
 
   CatalogItem({
     required this.id,
@@ -34,13 +36,13 @@ class CatalogItem {
     required this.categoryName,
     required this.language,
     required this.type,
+    required this.productType,
     this.isComingSoon = false,
   });
 
   factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
     bool comingSoon = false;
     
-    // FIX 1: Safely handle missing release_date for Products
     if (itemType == 'courses' && json.containsKey('release_date') && json['release_date'] != null) {
       DateTime? release = DateTime.tryParse(json['release_date'].toString());
       if (release != null && release.isAfter(DateTime.now())) comingSoon = true;
@@ -48,11 +50,11 @@ class CatalogItem {
 
     return CatalogItem(
       id: int.tryParse(json['id'].toString()) ?? 0,
-      title: json['title'] ?? json['name'] ?? 'Untitled', // Handle products using 'name'
+      title: json['title'] ?? json['name'] ?? 'Untitled',
       slug: json['slug'] ?? '',
       thumbnailUrl: json['thumbnail_url'] != null && json['thumbnail_url'].toString().isNotEmpty
           ? (json['thumbnail_url'].toString().startsWith('http') ? json['thumbnail_url'] : 'https://academy.kainuwa.africa/${json['thumbnail_url']}')
-          : (json['thumbnail_path'] != null && json['thumbnail_path'].toString().isNotEmpty // Handle products using 'thumbnail_path'
+          : (json['thumbnail_path'] != null && json['thumbnail_path'].toString().isNotEmpty 
               ? (json['thumbnail_path'].toString().startsWith('http') ? json['thumbnail_path'] : 'https://academy.kainuwa.africa/${json['thumbnail_path']}')
               : ''),
       price: double.tryParse(json['price'].toString()) ?? 0.0,
@@ -62,6 +64,7 @@ class CatalogItem {
       categoryName: json['category_name'] ?? 'General',
       language: json['language'] ?? 'EN',
       type: itemType,
+      productType: json['product_type'] ?? 'digital', // Safely parse product type
       isComingSoon: comingSoon,
     );
   }
@@ -87,7 +90,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   String _selectedCategory = 'All';
   String _selectedLevel = 'All';
-  RangeValues _priceRange = const RangeValues(0, 100000); // Expanded range for products
+  String _selectedProductType = 'All'; // NEW: Filter State
+  RangeValues _priceRange = const RangeValues(0, 100000);
 
   @override
   void initState() {
@@ -127,7 +131,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save items.')));
+      KaidaAlert.showModal(context: context, title: 'Authentication Required', message: 'Please log in to save items.', isError: true);
       return;
     }
 
@@ -140,20 +144,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse(ApiConfig.toggleWishlist),
-        body: {'user_id': userId.toString(), 'item_id': itemId.toString(), 'item_type': itemType}
-      );
+      final response = await http.post(Uri.parse(ApiConfig.toggleWishlist), body: {'user_id': userId.toString(), 'item_id': itemId.toString(), 'item_type': itemType});
       final data = json.decode(response.body);
-      
       if (data['status'] != 'success') {
         setState(() {
           if (isCurrentlyWishlisted) _wishlistedCourseIds.add(itemId);
           else _wishlistedCourseIds.remove(itemId);
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Action failed.')));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message']), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
       }
     } catch (e) {
       setState(() {
@@ -174,9 +171,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
           for (var item in list) {
             try {
               parsedList.add(CatalogItem.fromJson(item, widget.actionType.contains('products') ? 'products' : 'courses'));
-            } catch (e) {
-              debugPrint("Error parsing item: $e");
-            }
+            } catch (e) {}
           }
           if (mounted) {
             setState(() {
@@ -194,12 +189,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   void _filterResults() {
     String query = _searchController.text.toLowerCase();
+    bool isProductMode = widget.actionType.contains('products');
+    
     setState(() {
       _filteredItems = _allItems.where((item) {
         bool matchesSearch = item.title.toLowerCase().contains(query) || item.categoryName.toLowerCase().contains(query);
         bool matchesCategory = _selectedCategory == 'All' || item.categoryName == _selectedCategory;
         bool matchesPrice = item.price >= _priceRange.start && item.price <= _priceRange.end;
-        return matchesSearch && matchesCategory && matchesPrice;
+        bool matchesProductType = !isProductMode || _selectedProductType == 'All' || item.productType.toLowerCase() == _selectedProductType.toLowerCase();
+        
+        return matchesSearch && matchesCategory && matchesPrice && matchesProductType;
       }).toList();
       
       _filteredItems.sort((a, b) {
@@ -210,7 +209,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   void _showFilterModal(bool isDark) {
-    bool isProductMode = widget.actionType.contains('products'); // Determine context
+    bool isProductMode = widget.actionType.contains('products'); 
+
+    // Contextual categories
+    List<String> categories = isProductMode 
+        ? ['All', 'E-Books', 'Software', 'Apparel', 'Hardware', 'Templates'] 
+        : ['All', 'Design', 'Coding', 'Business', 'Marketing'];
 
     showModalBottomSheet(
       context: context,
@@ -219,7 +223,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       builder: (context) => StatefulBuilder(
         builder: (BuildContext context, StateSetter setModalState) {
           return Container(
-            height: MediaQuery.of(context).size.height * (isProductMode ? 0.6 : 0.85), // Shorter modal for products
+            height: MediaQuery.of(context).size.height * (isProductMode ? 0.7 : 0.85),
             decoration: BoxDecoration(
               color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -238,11 +242,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         setModalState(() {
                           _selectedCategory = 'All';
                           _selectedLevel = 'All';
+                          _selectedProductType = 'All';
                           _priceRange = const RangeValues(0, 100000);
                         });
                         setState(() {
                           _selectedCategory = 'All';
                           _selectedLevel = 'All';
+                          _selectedProductType = 'All';
                           _priceRange = const RangeValues(0, 100000);
                           _filterResults();
                         });
@@ -263,12 +269,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8, runSpacing: 8,
-                          children: ['All', 'Design', 'Coding', 'Business', 'Marketing'].map((cat) {
+                          children: categories.map((cat) {
                             bool isSelected = _selectedCategory == cat;
                             return ChoiceChip(
                               label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
                               selected: isSelected,
-                              showCheckmark: false, // FIX 3: Removed the ugly tick mark
+                              showCheckmark: false, // UI Upgrade: Removed Checkmark
                               selectedColor: AppTheme.primaryColor,
                               backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
                               onSelected: (val) => setModalState(() => _selectedCategory = cat),
@@ -277,7 +283,29 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           }).toList(),
                         ),
                         
-                        // FIX 2: Hide Level for Products
+                        // Dynamic Render: Product Type
+                        if (isProductMode) ...[
+                          const SizedBox(height: 24),
+                          const Text('Product Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8, runSpacing: 8,
+                            children: ['All', 'Digital', 'Physical'].map((type) {
+                              bool isSelected = _selectedProductType == type;
+                              return ChoiceChip(
+                                label: Text(type, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
+                                selected: isSelected,
+                                showCheckmark: false,
+                                selectedColor: AppTheme.primaryColor,
+                                backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
+                                onSelected: (val) => setModalState(() => _selectedProductType = type),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? AppTheme.primaryColor : Colors.transparent)),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                        
+                        // Dynamic Render: Course Level
                         if (!isProductMode) ...[
                           const SizedBox(height: 24),
                           const Text('Level', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -289,7 +317,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                               return ChoiceChip(
                                 label: Text(level, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
                                 selected: isSelected,
-                                showCheckmark: false, // FIX 3: Removed the ugly tick mark
+                                showCheckmark: false,
                                 selectedColor: AppTheme.primaryColor,
                                 backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
                                 onSelected: (val) => setModalState(() => _selectedLevel = level),
@@ -317,23 +345,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                             Text('₦${_priceRange.end.round()}', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
                           ],
                         ),
-
-                        // FIX 2: Hide Duration for Products
-                        if (!isProductMode) ...[
-                          const SizedBox(height: 24),
-                          const Text('Duration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8, runSpacing: 8,
-                            children: ['0-3 hours', '4-7 hours', '8-17 hours', '18+ hours'].map((dur) {
-                              return Chip(
-                                label: Text(dur, style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.black)),
-                                backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
-                              );
-                            }).toList(),
-                          ),
-                        ],
                         const SizedBox(height: 30),
                       ],
                     ),
@@ -344,10 +355,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () {
-                      _filterResults();
-                      Navigator.pop(context);
-                    },
+                    onPressed: () { _filterResults(); Navigator.pop(context); },
                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26))),
                     child: const Text('Apply Filter', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
@@ -371,7 +379,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        automaticallyImplyLeading: isProductMode, // Add back button if accessed from Profile
+        automaticallyImplyLeading: isProductMode, 
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         title: Text(widget.title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
       ),
@@ -504,8 +512,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ),
                     ),
                   ),
-                if (item.isComingSoon)
-                  Container(height: 110, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
               ],
             ),
             
@@ -534,7 +540,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       children: [
                         Icon(isProductMode ? Icons.store_rounded : Icons.person_rounded, size: 12, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Expanded(child: Text(item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(child: Text(isProductMode ? (item.productType.toUpperCase()) : item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                     const Spacer(),

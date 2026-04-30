@@ -9,6 +9,7 @@ import 'package:chewie/chewie.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 import 'catalog_screen.dart';
 import 'course_player_screen.dart';
 
@@ -31,9 +32,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
 
+  bool get isProduct => widget.item.type.contains('products'); // Determine layout context
+
   @override
   void initState() {
     super.initState();
+    // Products don't have lessons, so they get different tabs
     _tabController = TabController(length: 3, vsync: this);
     _fetchDetails();
   }
@@ -50,8 +54,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     final prefs = await SharedPreferences.getInstance();
     _userId = prefs.getInt('user_id');
 
+    // FIX API ROUTING: Products hit product_details.php, Courses hit course_details.php
+    String endpoint = isProduct ? 'product_details.php' : 'course_details.php';
+
     try {
-      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/course_details.php?slug=${widget.item.slug}&user_id=${_userId ?? 0}'));
+      final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/$endpoint?slug=${widget.item.slug}&user_id=${_userId ?? 0}'));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -63,7 +70,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               _isWishlisted = data['data']['is_wishlisted'] == true;
               _isLoading = false;
             });
-            _initializeVideoPlayer();
+            if (!isProduct) _initializeVideoPlayer();
           }
         }
       }
@@ -76,21 +83,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     String introUrl = _details?['course']?['intro_video_url']?.toString() ?? '';
     if (introUrl.isNotEmpty) {
       if (!introUrl.startsWith('http')) introUrl = 'https://academy.kainuwa.africa/' + introUrl;
-
       _videoController = VideoPlayerController.network(introUrl)
         ..initialize().then((_) {
           if (mounted) {
             setState(() {
               _chewieController = ChewieController(
                 videoPlayerController: _videoController!,
-                autoPlay: false, // FIX: Stops the video from playing audio secretly in the background
+                autoPlay: false,
                 looping: false,
                 aspectRatio: _videoController!.value.aspectRatio,
-                materialProgressColors: ChewieProgressColors(
-                  playedColor: AppTheme.primaryColor,
-                  handleColor: AppTheme.primaryColor,
-                  backgroundColor: Colors.grey,
-                ),
+                materialProgressColors: ChewieProgressColors(playedColor: AppTheme.primaryColor, handleColor: AppTheme.primaryColor, backgroundColor: Colors.grey),
               );
             });
           }
@@ -100,36 +102,28 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
 
   void _showVideoDialog() {
     if (_chewieController == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Video is loading... please try again in a moment.')));
+       KaidaAlert.showModal(context: context, title: 'Buffering', message: 'Video is loading... please try again in a moment.');
        return;
     }
-
-    // FIX: Only start playing the video when the pop-up actually opens
     _videoController?.play(); 
 
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.85), // FIX: Dims the background nicely
+      barrierColor: Colors.black.withOpacity(0.85), 
       builder: (context) => Dialog(
-        backgroundColor: Colors.transparent, // FIX: Removes the ugly white box behind the video
+        backgroundColor: Colors.transparent, 
         insetPadding: const EdgeInsets.all(16),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: _videoController!.value.aspectRatio,
-            child: Chewie(controller: _chewieController!),
-          ),
+          child: AspectRatio(aspectRatio: _videoController!.value.aspectRatio, child: Chewie(controller: _chewieController!)),
         ),
       ),
-    ).then((_) {
-      // FIX: Pauses the video automatically if the user clicks out of the pop-up
-      _videoController?.pause();
-    });
+    ).then((_) => _videoController?.pause());
   }
 
   Future<void> _toggleWishlist() async {
     if (_userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save courses.')));
+      KaidaAlert.showModal(context: context, title: 'Authentication Required', message: 'Please log in to save items.', isError: true);
       return;
     }
 
@@ -138,14 +132,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     try {
       final response = await http.post(
         Uri.parse(ApiConfig.toggleWishlist),
-        body: {'user_id': _userId.toString(), 'item_id': widget.item.id.toString(), 'item_type': 'course'}
+        body: {'user_id': _userId.toString(), 'item_id': widget.item.id.toString(), 'item_type': isProduct ? 'product' : 'course'}
       );
       final data = json.decode(response.body);
-      
-      if (data['status'] != 'success') {
-        setState(() => _isWishlisted = !_isWishlisted); 
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Failed to update wishlist')));
-      }
+      if (data['status'] != 'success') setState(() => _isWishlisted = !_isWishlisted); 
     } catch (e) {
       setState(() => _isWishlisted = !_isWishlisted); 
     }
@@ -153,24 +143,19 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
 
   void _handlePrimaryAction() {
     if (_userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first.')));
+      KaidaAlert.showModal(context: context, title: 'Authentication Required', message: 'Please log in first.', isError: true);
       return;
     }
 
-    if (_isEnrolled && widget.item.type == 'courses') {
-      Navigator.push(context, MaterialPageRoute(
-        builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)
-      ));
+    if (_isEnrolled && !isProduct) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)));
     } else {
-      String targetPath = widget.item.type == 'courses'
-          ? '/enroll.php?course_id=${widget.item.id}'
-          : '/view_product.php?slug=${widget.item.slug}';
-
+      String targetPath = isProduct ? '/view_product.php?slug=${widget.item.slug}' : '/enroll.php?course_id=${widget.item.id}';
       String encodedRedirect = Uri.encodeComponent(targetPath);
       String authBridgeUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$encodedRedirect';
 
       Navigator.push(context, MaterialPageRoute(builder: (context) => CheckoutWebViewScreen(
-        title: widget.item.type == 'courses' ? 'Enroll Course' : 'Buy Product',
+        title: isProduct ? 'Buy Product' : 'Enroll Course',
         url: authBridgeUrl,
       )));
     }
@@ -184,24 +169,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         color: isDark ? AppTheme.darkSurfaceColor : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(color: isDark ? Colors.black12 : Colors.grey.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))
-        ],
+        boxShadow: [BoxShadow(color: isDark ? Colors.black12 : Colors.grey.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: AppTheme.primaryColor, size: 22),
           const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown, 
-            child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))
-          ),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
           const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown, 
-            child: Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.w600), textAlign: TextAlign.center)
-          ),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.w600), textAlign: TextAlign.center)),
         ],
       ),
     );
@@ -213,9 +190,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     
     String priceText = 'Free';
     if (!widget.item.isFree) {
-       priceText = widget.item.discountPrice > 0 
-           ? '₦${widget.item.discountPrice.toStringAsFixed(0)}' 
-           : '₦${widget.item.price.toStringAsFixed(0)}';
+       priceText = widget.item.discountPrice > 0 ? '₦${widget.item.discountPrice.toStringAsFixed(0)}' : '₦${widget.item.price.toStringAsFixed(0)}';
     }
 
     return Scaffold(
@@ -266,22 +241,19 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                       height: 200,
                                       width: double.infinity,
                                       decoration: BoxDecoration(
+                                        color: isDark ? Colors.black26 : Colors.grey.shade100,
                                         image: DecorationImage(
                                           image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
                                           fit: BoxFit.cover,
                                         ),
                                       ),
-                                      child: _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty
+                                      child: (!isProduct && _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty)
                                           ? GestureDetector(
-                                              onTap: _showVideoDialog, // OPEN VIDEO MODAL
+                                              onTap: _showVideoDialog, 
                                               child: Center(
                                                 child: Container(
                                                   padding: const EdgeInsets.all(14),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.8),
-                                                    shape: BoxShape.circle,
-                                                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)],
-                                                  ),
+                                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.8), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)]),
                                                   child: const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
                                                 ),
                                               ),
@@ -291,13 +263,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   ),
                                   
                                   Positioned(
-                                    bottom: -16,
-                                    right: 16,
+                                    bottom: -16, right: 16,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.primaryColor, 
-                                        borderRadius: BorderRadius.circular(24),
+                                        color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(24),
                                         boxShadow: [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
                                       ),
                                       child: Text(priceText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5)),
@@ -333,17 +303,29 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   
                                   const SizedBox(height: 24),
                                   
-                                  Row(
-                                    children: [
-                                      Expanded(child: _buildStatCard(Icons.people_alt_rounded, _details?['student_count']?.toString() ?? '0', 'Students', isDark)),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: _buildStatCard(Icons.access_time_rounded, '25 hours', 'Duration', isDark)), 
-                                      const SizedBox(width: 8),
-                                      Expanded(child: _buildStatCard(Icons.play_lesson_rounded, _details?['sections']?.length.toString() ?? '0', 'Modules', isDark)),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: _buildStatCard(Icons.workspace_premium_rounded, 'Yes', 'Certificate', isDark)),
-                                    ],
-                                  ),
+                                  // DYNAMIC HEADER STATS
+                                  if (isProduct)
+                                    Row(
+                                      children: [
+                                        Expanded(child: _buildStatCard(Icons.inventory_2_rounded, _details?['product']?['stock_quantity']?.toString() ?? 'In Stock', 'Availability', isDark)),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: _buildStatCard(Icons.local_shipping_rounded, widget.item.productType == 'digital' ? 'Instant' : 'Shipping', 'Delivery', isDark)),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: _buildStatCard(Icons.category_rounded, widget.item.productType.toUpperCase(), 'Type', isDark)),
+                                      ],
+                                    )
+                                  else
+                                    Row(
+                                      children: [
+                                        Expanded(child: _buildStatCard(Icons.people_alt_rounded, _details?['student_count']?.toString() ?? '0', 'Students', isDark)),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: _buildStatCard(Icons.access_time_rounded, '25 hours', 'Duration', isDark)), 
+                                        const SizedBox(width: 8),
+                                        Expanded(child: _buildStatCard(Icons.play_lesson_rounded, _details?['sections']?.length.toString() ?? '0', 'Modules', isDark)),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: _buildStatCard(Icons.workspace_premium_rounded, 'Yes', 'Certificate', isDark)),
+                                      ],
+                                    ),
                                   
                                   const SizedBox(height: 24),
                                 ],
@@ -363,7 +345,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                             indicatorColor: AppTheme.primaryColor,
                             indicatorWeight: 3,
                             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                            tabs: const [
+                            tabs: isProduct ? const [
+                              Tab(text: 'Description'),
+                              Tab(text: 'Details'),
+                              Tab(text: 'Reviews'),
+                            ] : const [
                               Tab(text: 'About'),
                               Tab(text: 'Lessons'),
                               Tab(text: 'Reviews'),
@@ -377,10 +363,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                   
                   body: TabBarView(
                     controller: _tabController,
-                    children: [
-                      _buildAboutTab(isDark),
-                      _buildLessonsTab(isDark),
-                      _buildReviewsTab(isDark),
+                    children: isProduct ? [
+                      _buildAboutTab(isDark), // Description
+                      _buildProductDetailsTab(isDark), // Specs
+                      _buildReviewsTab(isDark), // Reviews
+                    ] : [
+                      _buildAboutTab(isDark), // About
+                      _buildLessonsTab(isDark), // Lessons
+                      _buildReviewsTab(isDark), // Reviews
                     ],
                   ),
                 ),
@@ -405,7 +395,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                             elevation: 0,
                           ),
                           child: Text(
-                            widget.item.isComingSoon ? 'Coming Soon' : (_isEnrolled ? 'Start Course' : 'Enroll Course $priceText'),
+                            widget.item.isComingSoon 
+                              ? 'Coming Soon' 
+                              : (isProduct ? 'Buy Product $priceText' : (_isEnrolled ? 'Start Course' : 'Enroll Course $priceText')),
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
@@ -424,22 +416,40 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              radius: 25,
-              backgroundImage: CachedNetworkImageProvider(_details?['course']?['instructor_avatar'] ?? ''),
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+          if (!isProduct) ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                radius: 25,
+                backgroundImage: CachedNetworkImageProvider(_details?['course']?['instructor_avatar'] ?? ''),
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              ),
+              title: Text(widget.item.instructorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              subtitle: Text(_details?['course']?['instructor_headline'] ?? 'Professional Instructor', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
             ),
-            title: Text(widget.item.instructorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            subtitle: Text(_details?['course']?['instructor_headline'] ?? 'Professional Instructor', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-          ),
-          const SizedBox(height: 24),
-          const Text('About Course', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+          ],
+          Text(isProduct ? 'Product Description' : 'About Course', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Text(
-            _details?['course']?['description']?.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), '') ?? 'No description available.',
+            (isProduct ? _details?['product']?['description'] : _details?['course']?['description'])?.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), '') ?? 'No description available.',
+            style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, height: 1.5, fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductDetailsTab(bool isDark) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Specifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Text(
+            _details?['product']?['specifications']?.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), '') ?? 'No specifications provided.',
             style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, height: 1.5, fontSize: 15),
           ),
         ],
@@ -449,17 +459,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
 
   Widget _buildLessonsTab(bool isDark) {
     List<dynamic> lessons = [];
-    if (_details?['items_by_section'] != null) {
-      if (_details!['items_by_section'] is Map) {
-        _details!['items_by_section'].forEach((key, value) {
-          lessons.addAll(value);
-        });
-      }
+    if (_details?['items_by_section'] != null && _details!['items_by_section'] is Map) {
+      _details!['items_by_section'].forEach((key, value) { lessons.addAll(value); });
     }
 
-    if (lessons.isEmpty) {
-      return Center(child: Text('Curriculum being updated.', style: TextStyle(color: Colors.grey.shade500)));
-    }
+    if (lessons.isEmpty) return Center(child: Text('Curriculum being updated.', style: TextStyle(color: Colors.grey.shade500)));
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
@@ -474,18 +478,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
-                image: DecorationImage(
-                  image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken),
-                ),
+                image: DecorationImage(image: CachedNetworkImageProvider(widget.item.thumbnailUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken)),
               ),
-              child: Center(
-                child: Text(
-                  (index + 1).toString().padLeft(2, '0'),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
+              child: Center(child: Text((index + 1).toString().padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -498,11 +493,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle),
-              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
-            ),
+            Container(padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: AppTheme.primaryColor, shape: BoxShape.circle), child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20)),
           ],
         );
       },
@@ -511,7 +502,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
 
   Widget _buildReviewsTab(bool isDark) {
     List<dynamic> reviews = _details?['reviews'] ?? [];
-    
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       child: Column(
@@ -524,11 +514,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                   Text(_details?['review_summary']?['avg_rating']?.toString() ?? '0.0', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
                   const Row(
                     children: [
-                      Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                      Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                      Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                      Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                      Icon(Icons.star_half_rounded, color: Colors.amber, size: 16),
+                      Icon(Icons.star_rounded, color: Colors.amber, size: 16), Icon(Icons.star_rounded, color: Colors.amber, size: 16), Icon(Icons.star_rounded, color: Colors.amber, size: 16), Icon(Icons.star_rounded, color: Colors.amber, size: 16), Icon(Icons.star_half_rounded, color: Colors.amber, size: 16),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -545,17 +531,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                         children: [
                           Text('$star', style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.bold)),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: star == 5 ? 0.7 : (star == 4 ? 0.2 : 0.05), 
-                                backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
-                                minHeight: 6,
-                              ),
-                            ),
-                          ),
+                          Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: star == 5 ? 0.7 : (star == 4 ? 0.2 : 0.05), backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200, valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor), minHeight: 6))),
                         ],
                       ),
                     );
@@ -564,14 +540,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               ),
             ],
           ),
-          
           const SizedBox(height: 30),
           const Text('Reviews', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          
-          if (reviews.isEmpty)
-            Center(child: Text('No reviews yet.', style: TextStyle(color: Colors.grey.shade500))),
-          
+          if (reviews.isEmpty) Center(child: Text('No reviews yet.', style: TextStyle(color: Colors.grey.shade500))),
           ...reviews.map((r) => Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: Column(
@@ -579,22 +551,18 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundImage: CachedNetworkImageProvider(r['avatar_url'] ?? ''),
-                      backgroundColor: Colors.grey.shade200,
-                    ),
+                    CircleAvatar(radius: 20, backgroundImage: CachedNetworkImageProvider(r['avatar_url'] ?? ''), backgroundColor: Colors.grey.shade200),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(r['full_name'] ?? 'Student', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text(r['full_name'] ?? 'Buyer', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           Row(
                             children: [
                               ...List.generate(5, (i) => Icon(Icons.star_rounded, size: 14, color: i < (r['rating'] ?? 5) ? Colors.amber : Colors.grey.shade300)),
                               const SizedBox(width: 8),
-                              Text('1 week ago', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)), 
+                              Text('Verified', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)), 
                             ],
                           ),
                         ],
@@ -616,33 +584,21 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
   final Color _color;
-
   _SliverAppBarDelegate(this._tabBar, this._color);
-
   @override
   double get minExtent => _tabBar.preferredSize.height;
   @override
   double get maxExtent => _tabBar.preferredSize.height;
-
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: _color,
-      child: _tabBar,
-    );
-  }
-
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Container(color: _color, child: _tabBar);
   @override
-  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
-    return false;
-  }
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
   const CheckoutWebViewScreen({Key? key, required this.title, required this.url}) : super(key: key);
-
   @override
   _CheckoutWebViewScreenState createState() => _CheckoutWebViewScreenState();
 }
@@ -660,15 +616,9 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
       ..setBackgroundColor(AppTheme.backgroundColor)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) { 
-            if (mounted) setState(() { _isLoading = true; _hasError = false; }); 
-          },
-          onPageFinished: (String url) { 
-            if (mounted) setState(() => _isLoading = false); 
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (mounted) setState(() { _isLoading = false; _hasError = true; });
-          },
+          onPageStarted: (String url) { if (mounted) setState(() { _isLoading = true; _hasError = false; }); },
+          onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
+          onWebResourceError: (WebResourceError error) { if (mounted) setState(() { _isLoading = false; _hasError = true; }); },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
@@ -692,13 +642,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           iconTheme: const IconThemeData(color: Colors.white),
           backgroundColor: AppTheme.primaryColor,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh), 
-              onPressed: () {
-                setState(() { _hasError = false; _isLoading = true; });
-                _controller.reload();
-              }
-            ),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); }),
           ],
         ),
         body: Stack(
@@ -711,24 +655,13 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
                     const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
                     const SizedBox(height: 16),
                     const Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text('Please check your internet connection.', style: TextStyle(color: Colors.grey)),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-                      onPressed: () {
-                        setState(() { _hasError = false; _isLoading = true; });
-                        _controller.reload();
-                      },
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text('Try Again', style: TextStyle(color: Colors.white)),
-                    )
+                    ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); }, icon: const Icon(Icons.refresh, color: Colors.white), label: const Text('Try Again', style: TextStyle(color: Colors.white)))
                   ],
                 ),
               )
             else
               WebViewWidget(controller: _controller),
-              
             if (_isLoading && !_hasError) const Center(child: KaidaLoader()),
           ],
         ),
