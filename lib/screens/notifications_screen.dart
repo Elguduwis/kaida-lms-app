@@ -115,7 +115,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (actionType == 'open_course') {
       int courseId = int.tryParse(notif['course_id']?.toString() ?? '0') ?? 0;
       if (courseId > 0) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => CoursePlayerScreen(courseId: courseId, courseTitle: notif['title'])));
+        CatalogItem dummy = CatalogItem(id: courseId, title: notif['title'] ?? 'Course', slug: notif['course_slug']?.toString() ?? '', thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'); Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: dummy)));
       }
     } else if (actionType == 'open_dashboard') {
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout(initialIndex: 3)), (route) => false);

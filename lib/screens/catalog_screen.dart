@@ -21,8 +21,9 @@ class CatalogItem {
   final String categoryName;
   final String language;
   final String type;
+  final String productType;
   final bool isComingSoon;
-  final String productType; // NEW: Digital vs Physical
+  final bool isOutOfStock; // CRITICAL FIX 2: Inventory Tracking
 
   CatalogItem({
     required this.id,
@@ -38,14 +39,22 @@ class CatalogItem {
     required this.type,
     required this.productType,
     this.isComingSoon = false,
+    this.isOutOfStock = false,
   });
 
   factory CatalogItem.fromJson(Map<String, dynamic> json, String itemType) {
     bool comingSoon = false;
+    bool outOfStock = false;
     
     if (itemType == 'courses' && json.containsKey('release_date') && json['release_date'] != null) {
       DateTime? release = DateTime.tryParse(json['release_date'].toString());
       if (release != null && release.isAfter(DateTime.now())) comingSoon = true;
+    }
+
+    String pType = json['product_type'] ?? 'digital';
+    if (itemType.contains('products') && pType == 'physical') {
+      int qty = int.tryParse(json['stock_quantity']?.toString() ?? '1') ?? 1;
+      if (qty <= 0) outOfStock = true;
     }
 
     return CatalogItem(
@@ -64,8 +73,9 @@ class CatalogItem {
       categoryName: json['category_name'] ?? 'General',
       language: json['language'] ?? 'EN',
       type: itemType,
-      productType: json['product_type'] ?? 'digital', // Safely parse product type
+      productType: pType,
       isComingSoon: comingSoon,
+      isOutOfStock: outOfStock,
     );
   }
 }
@@ -73,9 +83,7 @@ class CatalogItem {
 class CatalogScreen extends StatefulWidget {
   final String actionType;
   final String title;
-
   const CatalogScreen({Key? key, required this.actionType, required this.title}) : super(key: key);
-
   @override
   _CatalogScreenState createState() => _CatalogScreenState();
 }
@@ -85,12 +93,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
   List<CatalogItem> _allItems = [];
   List<CatalogItem> _filteredItems = [];
   Set<int> _wishlistedCourseIds = {};
-  
   final TextEditingController _searchController = TextEditingController();
 
   String _selectedCategory = 'All';
   String _selectedLevel = 'All';
-  String _selectedProductType = 'All'; // NEW: Filter State
+  String _selectedProductType = 'All'; 
   RangeValues _priceRange = const RangeValues(0, 100000);
 
   @override
@@ -210,8 +217,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
   void _showFilterModal(bool isDark) {
     bool isProductMode = widget.actionType.contains('products'); 
-
-    // Contextual categories
     List<String> categories = isProductMode 
         ? ['All', 'E-Books', 'Software', 'Apparel', 'Hardware', 'Templates'] 
         : ['All', 'Design', 'Coding', 'Business', 'Marketing'];
@@ -274,7 +279,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                             return ChoiceChip(
                               label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.grey.shade300 : Colors.black))),
                               selected: isSelected,
-                              showCheckmark: false, // UI Upgrade: Removed Checkmark
+                              showCheckmark: false, 
                               selectedColor: AppTheme.primaryColor,
                               backgroundColor: isDark ? AppTheme.darkSurfaceColor : Colors.grey.shade100,
                               onSelected: (val) => setModalState(() => _selectedCategory = cat),
@@ -283,7 +288,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           }).toList(),
                         ),
                         
-                        // Dynamic Render: Product Type
                         if (isProductMode) ...[
                           const SizedBox(height: 24),
                           const Text('Product Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -305,7 +309,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           ),
                         ],
                         
-                        // Dynamic Render: Course Level
                         if (!isProductMode) ...[
                           const SizedBox(height: 24),
                           const Text('Level', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -379,7 +382,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        automaticallyImplyLeading: isProductMode, 
+        automaticallyImplyLeading: true, 
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         title: Text(widget.title, style: TextStyle(color: isDark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
       ),
@@ -487,7 +490,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
                       : Container(height: 110, color: AppTheme.primaryColor.withOpacity(0.2), child: Icon(isProductMode ? Icons.shopping_bag_rounded : Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
-                if (discountPercent > 0 && !item.isComingSoon)
+                if (discountPercent > 0 && !item.isComingSoon && !item.isOutOfStock)
                   Positioned(
                     top: 8, left: 8,
                     child: Container(
@@ -496,7 +499,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                if (!item.isComingSoon)
+                if (!item.isComingSoon && !item.isOutOfStock)
                   Positioned(
                     top: 6, right: 6,
                     child: GestureDetector(
@@ -512,6 +515,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ),
                     ),
                   ),
+                if (item.isComingSoon)
+                  Container(height: 110, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
+                else if (item.isOutOfStock)
+                  Container(height: 110, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
               ],
             ),
             
@@ -547,6 +554,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     
                     if (item.isComingSoon)
                       const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12))
+                    else if (item.isOutOfStock)
+                      const Text('UNAVAILABLE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12))
                     else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
                       const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
                     else if (item.discountPrice > 0 && item.discountPrice < item.price)

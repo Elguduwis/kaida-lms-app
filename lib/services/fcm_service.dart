@@ -57,7 +57,7 @@ class FcmService {
         final courseTitle = data['course_title']?.toString() ?? 'Course';
         
         if (courseId > 0) {
-          navigatorKey.currentState!.push(
+          CatalogItem dummy = CatalogItem(id: courseId, title: courseTitle, slug: data['course_slug']?.toString() ?? '', thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'); navigatorKey.currentState!.push(MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: dummy)));//
             MaterialPageRoute(
               builder: (context) => CoursePlayerScreen(courseId: courseId, courseTitle: courseTitle),
             ),

@@ -34,6 +34,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   ChewieController? _chewieController;
 
   bool get isProduct => widget.item.type.contains('products'); 
+  
+  // CRITICAL FIX 3: Detect if current user is the instructor of this course
+  bool get isInstructor => !isProduct && _details?['course']?['instructor_id']?.toString() == _userId?.toString();
 
   @override
   void initState() {
@@ -143,7 +146,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
       return;
     }
 
-    if (_isEnrolled && !isProduct) {
+    if ((_isEnrolled || isInstructor) && !isProduct) {
       Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)));
     } else {
       String targetPath = isProduct 
@@ -157,6 +160,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         title: isProduct ? 'Checkout' : 'Enroll Course',
         url: authBridgeUrl,
       )));
+    }
+  }
+
+  String _getButtonLabel(String priceText) {
+    if (widget.item.isComingSoon) return 'Coming Soon';
+    if (isProduct) {
+      if (widget.item.isOutOfStock) return 'Out of Stock';
+      return 'Buy Product $priceText';
+    } else {
+      if (_isEnrolled || isInstructor) return 'Start Learning';
+      return 'Enroll Course $priceText';
     }
   }
 
@@ -191,6 +205,8 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     if (!widget.item.isFree) {
        priceText = widget.item.discountPrice > 0 ? '₦${widget.item.discountPrice.toStringAsFixed(0)}' : '₦${widget.item.price.toStringAsFixed(0)}';
     }
+
+    bool isButtonDisabled = widget.item.isComingSoon || (isProduct && widget.item.isOutOfStock);
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
@@ -241,17 +257,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                       width: double.infinity,
                                       decoration: BoxDecoration(
                                         color: isDark ? Colors.black26 : Colors.grey.shade100,
-                                        image: DecorationImage(
+                                        image: widget.item.thumbnailUrl.isNotEmpty ? DecorationImage(
                                           image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
                                           fit: BoxFit.cover,
-                                        ),
+                                        ) : null,
                                       ),
-                                      // CRITICAL FIX: Replaced Alert with Loading Spinner on Play Button
                                       child: (!isProduct && _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty)
                                           ? GestureDetector(
-                                              onTap: () {
-                                                if (_chewieController != null) _showVideoDialog();
-                                              }, 
+                                              onTap: () { if (_chewieController != null) _showVideoDialog(); }, 
                                               child: Center(
                                                 child: Container(
                                                   padding: const EdgeInsets.all(14),
@@ -266,17 +279,18 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                     ),
                                   ),
                                   
-                                  Positioned(
-                                    bottom: -16, right: 16,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(24),
-                                        boxShadow: [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
+                                  if (!isButtonDisabled)
+                                    Positioned(
+                                      bottom: -16, right: 16,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor, borderRadius: BorderRadius.circular(24),
+                                          boxShadow: [BoxShadow(color: AppTheme.primaryColor.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
+                                        ),
+                                        child: Text(priceText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5)),
                                       ),
-                                      child: Text(priceText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5)),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -391,17 +405,15 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                       child: SizedBox(
                         height: 54,
                         child: ElevatedButton(
-                          onPressed: widget.item.isComingSoon ? null : _handlePrimaryAction,
+                          onPressed: isButtonDisabled ? null : _handlePrimaryAction,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: widget.item.isComingSoon ? Colors.grey : AppTheme.primaryColor,
+                            backgroundColor: isButtonDisabled ? (isDark ? Colors.grey.shade800 : Colors.grey.shade400) : AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                             elevation: 0,
                           ),
                           child: Text(
-                            widget.item.isComingSoon 
-                              ? 'Coming Soon' 
-                              : (isProduct ? 'Buy Product $priceText' : (_isEnrolled ? 'Start Course' : 'Enroll Course $priceText')),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            _getButtonLabel(priceText),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isButtonDisabled ? Colors.grey.shade300 : Colors.white),
                           ),
                         ),
                       ),
@@ -481,7 +493,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
-                image: DecorationImage(image: CachedNetworkImageProvider(widget.item.thumbnailUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken)),
+                image: widget.item.thumbnailUrl.isNotEmpty ? DecorationImage(image: CachedNetworkImageProvider(widget.item.thumbnailUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken)) : null,
               ),
               child: Center(child: Text((index + 1).toString().padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
             ),
@@ -598,7 +610,6 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
-// CRITICAL FIX: The Solid Background Architecture
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -659,22 +670,16 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
               }
             },
           ),
-          title: Text(
-            widget.title, 
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
-          ),
+          title: Text(widget.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
           actions: [
             IconButton(
               icon: Icon(Icons.home_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
-              onPressed: () {
-                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout()), (route) => false);
-              }
+              onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout()), (route) => false)
             ),
             IconButton(
               icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
               onPressed: () {
                 setState(() { _hasError = false; _isLoading = true; });
-                // CRITICAL FIX: loadRequest completely prevents ERR_CACHE_MISS
                 _controller.loadRequest(Uri.parse(widget.url)); 
               }
             ),
@@ -683,17 +688,8 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
         ),
         body: Stack(
           children: [
-            // Underlying WebView (Always present but hidden if loading/error)
             WebViewWidget(controller: _controller),
-            
-            // Solid Overlay during Loading (Hides native UI rendering flashes)
-            if (_isLoading && !_hasError)
-              Container(
-                color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
-                child: const Center(child: KaidaLoader()),
-              ),
-              
-            // Solid Overlay for Errors (Completely hides the native 'Webpage not available' text)
+            if (_isLoading && !_hasError) Container(color: isDark ? AppTheme.darkBackgroundColor : Colors.white, child: const Center(child: KaidaLoader())),
             if (_hasError)
               Container(
                 color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
@@ -704,15 +700,10 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
                       const Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey),
                       const SizedBox(height: 16),
                       Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                      const SizedBox(height: 8),
-                      Text('Please check your internet connection.', style: TextStyle(color: Colors.grey.shade500)),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        onPressed: () {
-                          setState(() { _hasError = false; _isLoading = true; });
-                          _controller.loadRequest(Uri.parse(widget.url)); 
-                        },
+                        onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.loadRequest(Uri.parse(widget.url)); },
                         icon: const Icon(Icons.refresh_rounded, color: Colors.white),
                         label: const Text('Try Again', style: TextStyle(color: Colors.white))
                       )

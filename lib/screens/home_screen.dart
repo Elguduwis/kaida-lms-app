@@ -243,7 +243,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (release != null && release.isAfter(now)) isComingSoon = true;
               }
               CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
-              if (isComingSoon) coming.add(parsed); else active.add(parsed);
+              if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
+                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))), coming.add(parsed); else active.add(parsed);
             } catch (e) {}
           }
           if (mounted) {
@@ -737,7 +738,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                if (isComingSoon)
+                if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
+                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
                   Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
               ],
             ),
@@ -768,7 +770,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (isComingSoon)
+                  if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
+                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
                     const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13))
                   else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
                     const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
