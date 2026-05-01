@@ -52,12 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchCatalogData();
     _fetchWishlist();
     _fetchUnreadCount(); 
-    
-    // DELAY THE SYNC SLIGHTLY TO ENSURE CONTEXT IS MOUNTED FOR ALERTS
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) _syncFcmToken(); 
-    });
-    
+    _syncFcmToken(); // Silent background sync
     _startBannerTimer();
   }
 
@@ -89,57 +84,25 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good Evening,';
   }
 
-  // CRITICAL DEBUG FIX: Aggressive FCM Token Sync
+  // FIXED: Graceful, silent background sync
   Future<void> _syncFcmToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
-      // Robust User ID extraction (handles both string and int saves)
       final userIdStr = prefs.get('user_id')?.toString();
       final userId = int.tryParse(userIdStr ?? '');
-
-      if (userId == null) {
-        KaidaAlert.showModal(context: context, title: 'FCM Sync Error', message: 'User ID is missing from local storage.', isError: true);
-        return;
-      }
       
-      String? token;
-      try {
-        token = await FirebaseMessaging.instance.getToken();
-      } catch (e) {
-        KaidaAlert.showModal(context: context, title: 'Firebase Error', message: 'Failed to generate token: $e', isError: true);
-        return;
-      }
-
+      if (userId == null) return;
+      
+      String? token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
-        // Explicitly hardcode the path to avoid ApiConfig issues
         String apiUrl = '${ApiConfig.baseUrl}/save_fcm_token.php'.replaceAll('//save_fcm', '/save_fcm');
-        
-        final response = await http.post(
+        await http.post(
           Uri.parse(apiUrl),
           body: {'user_id': userId.toString(), 'token': token},
         );
-        
-        if (response.statusCode == 200) {
-          try {
-            final data = json.decode(response.body);
-            if (data['status'] != 'success') {
-              KaidaAlert.showModal(context: context, title: 'API Error', message: data['message'] ?? 'Failed to save token on server.', isError: true);
-            } else {
-              // SUCCESS! We will show this ONCE so you know it worked.
-              KaidaAlert.showModal(context: context, title: 'FCM Success', message: 'Device securely linked to admin panel!', isError: false);
-            }
-          } catch (e) {
-            KaidaAlert.showModal(context: context, title: 'JSON Error', message: 'Server returned invalid JSON.', isError: true);
-          }
-        } else {
-          KaidaAlert.showModal(context: context, title: 'HTTP Error', message: 'Server returned status: ${response.statusCode}', isError: true);
-        }
-      } else {
-         KaidaAlert.showModal(context: context, title: 'FCM Error', message: 'Firebase returned a null token.', isError: true);
       }
     } catch (e) {
-      KaidaAlert.showModal(context: context, title: 'Unknown Error', message: 'FCM Sync failed: $e', isError: true);
+      // Silent fail
     }
   }
 
@@ -163,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      debugPrint("Badge Fetch Error: $e");
+      // Silent fail
     }
   }
 
