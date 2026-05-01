@@ -44,8 +44,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     return qty <= 0;
   }
 
-  // --- CRITICAL FIX: SELF-HEALING UI GETTERS ---
-  // These will overwrite the "Dummy" push notification data the moment the API responds!
   String get displayTitle => (!isProduct ? _details?['course']?['title'] : _details?['product']?['name'])?.toString() ?? widget.item.title;
   String get displayCategory => (!isProduct ? _details?['course']?['category_name'] : _details?['product']?['category_name'])?.toString() ?? widget.item.categoryName;
   String get displayInstructor => isProduct ? 'Kainuwa Store' : (_details?['course']?['instructor_name']?.toString() ?? widget.item.instructorName);
@@ -83,13 +81,18 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
     return widget.item.isComingSoon;
   }
-  // ---------------------------------------------
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _fetchDetails();
+    
+    // Safety check: if slug is completely empty, fail immediately
+    if (widget.item.slug.isEmpty) {
+      if (mounted) setState(() => _isLoading = false);
+    } else {
+      _fetchDetails();
+    }
   }
 
   @override
@@ -122,11 +125,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
             if (!isProduct) _initializeVideoPlayer();
           }
         } else {
-          if (mounted) {
-            setState(() => _isLoading = false);
-            KaidaAlert.showModal(context: context, title: 'Unavailable', message: data['message'] ?? 'Could not load details.', isError: true);
-          }
+          if (mounted) setState(() => _isLoading = false);
         }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -181,7 +183,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     setState(() => _isWishlisted = !_isWishlisted);
 
     try {
-      // Hardcoded path to prevent ApiConfig trailing slash bugs
       String apiUrl = '${ApiConfig.baseUrl}/toggle_wishlist.php'.replaceAll('//toggle', '/toggle');
       final response = await http.post(
         Uri.parse(apiUrl),
@@ -295,6 +296,30 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    // CRITICAL FIX: If the screen finishes loading but _details is still NULL, show an error!
+    if (!_isLoading && _details == null) {
+      return Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20), onPressed: () => Navigator.pop(context)),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.broken_image_rounded, size: 80, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text('Item Unavailable', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+              const SizedBox(height: 8),
+              Text('This item may have been removed or updated.', style: TextStyle(color: Colors.grey.shade500)),
+            ],
+          ),
+        ),
+      );
+    }
+
     String priceText = 'Free';
     if (!displayIsFree) {
        priceText = displayDiscountPrice > 0 ? '₦${displayDiscountPrice.toStringAsFixed(0)}' : '₦${displayPrice.toStringAsFixed(0)}';

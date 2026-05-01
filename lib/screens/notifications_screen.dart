@@ -10,8 +10,8 @@ import '../widgets/kaida_loader.dart';
 import '../utils/kaida_alert.dart';
 import 'course_player_screen.dart';
 import 'main_layout.dart';
-import 'catalog_screen.dart'; // FIXED: Added Missing Import
-import 'item_details_screen.dart'; // FIXED: Added Missing Import
+import 'catalog_screen.dart'; 
+import 'item_details_screen.dart'; 
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -57,6 +57,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  // Helper to ensure UTC parsing for Database Timestamps
+  DateTime _parseToLocalTime(String timestamp) {
+    if (timestamp.isEmpty) return DateTime.now();
+    String tStr = timestamp;
+    if (!tStr.endsWith('Z')) tStr += 'Z'; // Force UTC interpretation
+    return DateTime.tryParse(tStr)?.toLocal() ?? DateTime.now();
+  }
+
   void _processNotifications(List<dynamic> data) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -69,7 +77,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     List<dynamic> olderList = [];
 
     for (var notif in data) {
-      DateTime dt = DateTime.tryParse(notif['created_at']?.toString() ?? '') ?? DateTime.now();
+      DateTime dt = _parseToLocalTime(notif['created_at']?.toString() ?? '');
       DateTime date = DateTime(dt.year, dt.month, dt.day);
 
       if (date == today) {
@@ -112,9 +120,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (actionType == 'open_course') {
       int courseId = int.tryParse(notif['course_id']?.toString() ?? '0') ?? 0;
       if (courseId > 0) {
+        // CRITICAL FIX: Use course_title from API instead of the notification header title
         CatalogItem dummy = CatalogItem(
-          id: courseId, title: notif['title'] ?? 'Course', slug: notif['course_slug']?.toString() ?? '', 
-          thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', 
+          id: courseId, 
+          title: notif['course_title']?.toString() ?? notif['title'] ?? 'Course', 
+          slug: notif['course_slug']?.toString() ?? '', 
+          thumbnailUrl: notif['image_url']?.toString() ?? '', 
+          price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', 
           categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
         ); 
         Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: dummy)));
@@ -138,12 +150,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _formatTime(String timestamp) {
-    DateTime dt = DateTime.tryParse(timestamp) ?? DateTime.now();
+    if (timestamp.isEmpty) return 'Now';
+    DateTime dt = _parseToLocalTime(timestamp);
     Duration diff = DateTime.now().difference(dt);
+    if (diff.isNegative || diff.inMinutes < 1) return 'Now';
     if (diff.inDays > 0) return '${diff.inDays}d';
     if (diff.inHours > 0) return '${diff.inHours}h';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
-    return 'Now';
+    return '${diff.inMinutes}m';
   }
 
   @override
