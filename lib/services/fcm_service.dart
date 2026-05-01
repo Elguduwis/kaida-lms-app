@@ -10,9 +10,20 @@ class FcmService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
   Future<void> initNotifications(GlobalKey<NavigatorState> navigatorKey) async {
-    NotificationSettings settings = await _firebaseMessaging.requestPermission();
+    NotificationSettings settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
     
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // CRITICAL FIX: Force heads-up banners even when the app is open in the foreground
+      await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+        alert: true, 
+        badge: true, 
+        sound: true,
+      );
+
       String? token = await _firebaseMessaging.getToken();
       if (token != null) await _saveTokenToServer(token);
 
@@ -20,15 +31,14 @@ class FcmService {
         _saveTokenToServer(newToken);
       });
 
-      // SCENARIO 1: App is in the Background, but still running in RAM
+      // Handle Background Clicks
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         _routeFromNotification(navigatorKey, message.data);
       });
 
-      // SCENARIO 2: App was completely Closed/Terminated
+      // Handle Terminated Clicks
       RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
-        // Add a slight delay to let the Splash Screen finish checking login status
         Future.delayed(const Duration(seconds: 3), () {
           _routeFromNotification(navigatorKey, initialMessage.data);
         });
@@ -36,7 +46,6 @@ class FcmService {
     }
   }
 
-  // The Dynamic Router Logic
   void _routeFromNotification(GlobalKey<NavigatorState> navigatorKey, Map<String, dynamic> data) {
     if (navigatorKey.currentState == null) return;
     
@@ -58,13 +67,12 @@ class FcmService {
         
       case 'open_dashboard':
         navigatorKey.currentState!.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const MainLayout()),
-          (Route<dynamic> route) => false, // Clears the stack
+          MaterialPageRoute(builder: (context) => const MainLayout(initialIndex: 3)),
+          (Route<dynamic> route) => false, 
         );
         break;
         
       default:
-        // Do nothing, just let the app open normally
         break;
     }
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
@@ -34,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _userName = "Learner"; 
   String? _userAvatar;
-  int _unreadNotifications = 0; // NEW: Holds the red badge count
+  int _unreadNotifications = 0; 
 
   List<dynamic> _banners = [];
   List<dynamic> _categories = [];
@@ -50,7 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchDashboardData();
     _fetchCatalogData();
     _fetchWishlist();
-    _fetchUnreadCount(); // NEW: Fetch notifications on load
+    _fetchUnreadCount(); 
+    _syncFcmToken(); // CRITICAL FIX: Self-healing token sync
     _startBannerTimer();
   }
 
@@ -82,15 +84,34 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good Evening,';
   }
 
-  // NEW: Fetch unread notifications count silently
+  // Self-Healing FCM Token Sync
+  Future<void> _syncFcmToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('user_id');
+      if (userId == null) return;
+      
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await http.post(
+          Uri.parse(ApiConfig.saveFcmToken),
+          body: {'user_id': userId.toString(), 'token': token},
+        );
+      }
+    } catch (e) {
+      // Silent background sync
+    }
+  }
+
   Future<void> _fetchUnreadCount() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     if (userId == null) return;
 
     try {
+      String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications_api.php'),
+        Uri.parse(apiUrl),
         body: {'action': 'get', 'user_id': userId.toString()}
       );
       if (response.statusCode == 200) {
@@ -102,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      // Silent fail for background check
+      // Silent fail
     }
   }
 
@@ -259,7 +280,8 @@ class _HomeScreenState extends State<HomeScreen> {
             await _fetchDashboardData();
             await _fetchCatalogData();
             await _fetchWishlist();
-            await _fetchUnreadCount(); // Refresh badge on pull
+            await _fetchUnreadCount(); 
+            await _syncFcmToken(); 
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -343,11 +365,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 12),
           
-          // CRITICAL FIX: The Dynamic Red Dot Badge
           GestureDetector(
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()))
-                .then((_) => _fetchUnreadCount()); // Re-check badge when user returns
+                .then((_) => _fetchUnreadCount()); 
             },
             child: Container(
               padding: const EdgeInsets.all(10),
