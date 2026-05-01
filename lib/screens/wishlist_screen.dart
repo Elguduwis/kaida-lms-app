@@ -1,3 +1,4 @@
+import '../utils/kaida_alert.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -72,7 +73,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
         Uri.parse(ApiConfig.toggleWishlist),
         body: {'user_id': _userId.toString(), 'item_id': courseId.toString(), 'item_type': 'course'}
       );
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from wishlist'), duration: Duration(seconds: 1)));
+      KaidaAlert.showModal(context: context, title: 'Removed', message: 'Course removed from wishlist.', isError: false);
     } catch (e) {
       _fetchWishlist(); // Re-fetch if API failed
     }

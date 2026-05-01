@@ -12,7 +12,7 @@ import '../widgets/kaida_loader.dart';
 import '../utils/kaida_alert.dart';
 import 'catalog_screen.dart';
 import 'course_player_screen.dart';
-import 'main_layout.dart'; // Needed for the Home Button routing
+import 'main_layout.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final CatalogItem item;
@@ -100,10 +100,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   }
 
   void _showVideoDialog() {
-    if (_chewieController == null) {
-       KaidaAlert.showModal(context: context, title: 'Buffering', message: 'Video is loading... please try again in a moment.');
-       return;
-    }
+    if (_chewieController == null) return;
     _videoController?.play(); 
 
     showDialog(
@@ -149,7 +146,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     if (_isEnrolled && !isProduct) {
       Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)));
     } else {
-      // FIX 1: Send Products to the buy_now API, send Courses to enroll
       String targetPath = isProduct 
           ? '/api/mobile/buy_now.php?product_id=${widget.item.id}' 
           : '/enroll.php?course_id=${widget.item.id}';
@@ -250,14 +246,19 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                           fit: BoxFit.cover,
                                         ),
                                       ),
+                                      // CRITICAL FIX: Replaced Alert with Loading Spinner on Play Button
                                       child: (!isProduct && _details?['course']?['intro_video_url'] != null && _details!['course']['intro_video_url'].toString().isNotEmpty)
                                           ? GestureDetector(
-                                              onTap: _showVideoDialog, 
+                                              onTap: () {
+                                                if (_chewieController != null) _showVideoDialog();
+                                              }, 
                                               child: Center(
                                                 child: Container(
                                                   padding: const EdgeInsets.all(14),
-                                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.8), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)]),
-                                                  child: const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
+                                                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.8), shape: BoxShape.circle, boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, spreadRadius: 2)]),
+                                                  child: _chewieController == null 
+                                                    ? const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(color: AppTheme.primaryColor, strokeWidth: 3))
+                                                    : const Icon(Icons.play_arrow_rounded, color: AppTheme.primaryColor, size: 32),
                                                 ),
                                               ),
                                             )
@@ -597,7 +598,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
-// FIX 2: Restored exact Kaida Premium WebView design
+// CRITICAL FIX: The Solid Background Architecture
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -622,6 +623,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           onPageStarted: (String url) { if (mounted) setState(() { _isLoading = true; _hasError = false; }); },
           onPageFinished: (String url) { if (mounted) setState(() => _isLoading = false); },
           onWebResourceError: (WebResourceError error) { if (mounted) setState(() { _isLoading = false; _hasError = true; }); },
+          onHttpError: (HttpResponseError error) { if (mounted) setState(() { _isLoading = false; _hasError = true; }); },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
@@ -665,18 +667,15 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
             IconButton(
               icon: Icon(Icons.home_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
               onPressed: () {
-                Navigator.pushAndRemoveUntil(
-                  context, 
-                  MaterialPageRoute(builder: (_) => const MainLayout()), 
-                  (route) => false
-                );
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout()), (route) => false);
               }
             ),
             IconButton(
               icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
               onPressed: () {
                 setState(() { _hasError = false; _isLoading = true; });
-                _controller.reload();
+                // CRITICAL FIX: loadRequest completely prevents ERR_CACHE_MISS
+                _controller.loadRequest(Uri.parse(widget.url)); 
               }
             ),
             const SizedBox(width: 8),
@@ -684,27 +683,43 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
         ),
         body: Stack(
           children: [
+            // Underlying WebView (Always present but hidden if loading/error)
+            WebViewWidget(controller: _controller),
+            
+            // Solid Overlay during Loading (Hides native UI rendering flashes)
+            if (_isLoading && !_hasError)
+              Container(
+                color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+                child: const Center(child: KaidaLoader()),
+              ),
+              
+            // Solid Overlay for Errors (Completely hides the native 'Webpage not available' text)
             if (_hasError)
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-                      onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); },
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text('Try Again', style: TextStyle(color: Colors.white))
-                    )
-                  ],
+              Container(
+                color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                      const SizedBox(height: 8),
+                      Text('Please check your internet connection.', style: TextStyle(color: Colors.grey.shade500)),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                        onPressed: () {
+                          setState(() { _hasError = false; _isLoading = true; });
+                          _controller.loadRequest(Uri.parse(widget.url)); 
+                        },
+                        icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                        label: const Text('Try Again', style: TextStyle(color: Colors.white))
+                      )
+                    ],
+                  ),
                 ),
-              )
-            else
-              WebViewWidget(controller: _controller),
-            if (_isLoading && !_hasError) const Center(child: KaidaLoader()),
+              ),
           ],
         ),
       ),

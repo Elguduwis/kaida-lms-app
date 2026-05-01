@@ -1,3 +1,4 @@
+import '../utils/kaida_alert.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -116,11 +117,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Avatar updated successfully!'), backgroundColor: Colors.green));
          _loadProfileData(); 
       } else {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update avatar'), backgroundColor: Colors.red));
+         KaidaAlert.showModal(context: context, title: 'Update Failed', message: 'Failed to update avatar.', isError: true);
          setState(() => _isLoading = false);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error uploading avatar'), backgroundColor: Colors.red));
+      KaidaAlert.showModal(context: context, title: 'Upload Error', message: 'An error occurred while uploading your avatar.', isError: true);
       setState(() => _isLoading = false);
     }
   }

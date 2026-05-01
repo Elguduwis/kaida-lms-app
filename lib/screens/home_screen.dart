@@ -1,3 +1,4 @@
+import '../utils/kaida_alert.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -103,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
     if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save courses.')));
+      KaidaAlert.showModal(context: context, title: 'Authentication Required', message: 'Please log in to save courses.', isError: true);
       return;
     }
 
@@ -126,9 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
           if (isCurrentlyWishlisted) _wishlistedCourseIds.add(courseId);
           else _wishlistedCourseIds.remove(courseId);
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Action failed.')));
+        KaidaAlert.showModal(context: context, title: 'Action Failed', message: data['message'] ?? 'Action failed.', isError: true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message']), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
+        KaidaAlert.showModal(context: context, title: 'Success', message: data['message'], isError: false);
       }
     } catch (e) {
       setState(() {
