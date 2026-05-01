@@ -12,6 +12,7 @@ import '../widgets/kaida_loader.dart';
 import '../utils/kaida_alert.dart';
 import 'catalog_screen.dart';
 import 'course_player_screen.dart';
+import 'main_layout.dart'; // Needed for the Home Button routing
 
 class ItemDetailsScreen extends StatefulWidget {
   final CatalogItem item;
@@ -32,12 +33,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
 
-  bool get isProduct => widget.item.type.contains('products'); // Determine layout context
+  bool get isProduct => widget.item.type.contains('products'); 
 
   @override
   void initState() {
     super.initState();
-    // Products don't have lessons, so they get different tabs
     _tabController = TabController(length: 3, vsync: this);
     _fetchDetails();
   }
@@ -54,7 +54,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     final prefs = await SharedPreferences.getInstance();
     _userId = prefs.getInt('user_id');
 
-    // FIX API ROUTING: Products hit product_details.php, Courses hit course_details.php
     String endpoint = isProduct ? 'product_details.php' : 'course_details.php';
 
     try {
@@ -150,12 +149,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     if (_isEnrolled && !isProduct) {
       Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)));
     } else {
-      String targetPath = isProduct ? '/view_product.php?slug=${widget.item.slug}' : '/enroll.php?course_id=${widget.item.id}';
+      // FIX 1: Send Products to the buy_now API, send Courses to enroll
+      String targetPath = isProduct 
+          ? '/api/mobile/buy_now.php?product_id=${widget.item.id}' 
+          : '/enroll.php?course_id=${widget.item.id}';
+          
       String encodedRedirect = Uri.encodeComponent(targetPath);
       String authBridgeUrl = 'https://academy.kainuwa.africa/api/mobile/webview_auth.php?user_id=$_userId&redirect=$encodedRedirect';
 
       Navigator.push(context, MaterialPageRoute(builder: (context) => CheckoutWebViewScreen(
-        title: isProduct ? 'Buy Product' : 'Enroll Course',
+        title: isProduct ? 'Checkout' : 'Enroll Course',
         url: authBridgeUrl,
       )));
     }
@@ -303,7 +306,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   
                                   const SizedBox(height: 24),
                                   
-                                  // DYNAMIC HEADER STATS
                                   if (isProduct)
                                     Row(
                                       children: [
@@ -364,13 +366,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                   body: TabBarView(
                     controller: _tabController,
                     children: isProduct ? [
-                      _buildAboutTab(isDark), // Description
-                      _buildProductDetailsTab(isDark), // Specs
-                      _buildReviewsTab(isDark), // Reviews
+                      _buildAboutTab(isDark),
+                      _buildProductDetailsTab(isDark),
+                      _buildReviewsTab(isDark),
                     ] : [
-                      _buildAboutTab(isDark), // About
-                      _buildLessonsTab(isDark), // Lessons
-                      _buildReviewsTab(isDark), // Reviews
+                      _buildAboutTab(isDark),
+                      _buildLessonsTab(isDark),
+                      _buildReviewsTab(isDark),
                     ],
                   ),
                 ),
@@ -595,6 +597,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
 
+// FIX 2: Restored exact Kaida Premium WebView design
 class CheckoutWebViewScreen extends StatefulWidget {
   final String title;
   final String url;
@@ -613,7 +616,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppTheme.backgroundColor)
+      ..setBackgroundColor(Colors.transparent)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (String url) { if (mounted) setState(() { _isLoading = true; _hasError = false; }); },
@@ -634,15 +637,49 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return WillPopScope(
       onWillPop: _goBack,
       child: Scaffold(
+        backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
         appBar: AppBar(
-          title: Text(widget.title, style: const TextStyle(fontSize: 16, color: Colors.white)),
-          iconTheme: const IconThemeData(color: Colors.white),
-          backgroundColor: AppTheme.primaryColor,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
+            onPressed: () async {
+              if (await _controller.canGoBack()) {
+                _controller.goBack();
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          title: Text(
+            widget.title, 
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
+          ),
           actions: [
-            IconButton(icon: const Icon(Icons.refresh), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); }),
+            IconButton(
+              icon: Icon(Icons.home_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
+              onPressed: () {
+                Navigator.pushAndRemoveUntil(
+                  context, 
+                  MaterialPageRoute(builder: (_) => const MainLayout()), 
+                  (route) => false
+                );
+              }
+            ),
+            IconButton(
+              icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
+              onPressed: () {
+                setState(() { _hasError = false; _isLoading = true; });
+                _controller.reload();
+              }
+            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: Stack(
@@ -654,9 +691,14 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
                   children: [
                     const Icon(Icons.wifi_off_rounded, size: 80, color: Colors.grey),
                     const SizedBox(height: 16),
-                    const Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); }, icon: const Icon(Icons.refresh, color: Colors.white), label: const Text('Try Again', style: TextStyle(color: Colors.white)))
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                      onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.reload(); },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      label: const Text('Try Again', style: TextStyle(color: Colors.white))
+                    )
                   ],
                 ),
               )
