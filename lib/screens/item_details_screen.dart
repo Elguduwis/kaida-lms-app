@@ -34,9 +34,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   ChewieController? _chewieController;
 
   bool get isProduct => widget.item.type.contains('products'); 
-  
-  // CRITICAL FIX 3: Detect if current user is the instructor of this course
   bool get isInstructor => !isProduct && _details?['course']?['instructor_id']?.toString() == _userId?.toString();
+
+  // CRITICAL FIX 1: Dynamic Stock Guard
+  bool get isDynamicOutOfStock {
+    if (!isProduct) return false;
+    if (widget.item.productType != 'physical') return false;
+    if (_details == null) return widget.item.isOutOfStock; 
+    int qty = int.tryParse(_details!['product']?['stock_quantity']?.toString() ?? '1') ?? 1;
+    return qty <= 0;
+  }
 
   @override
   void initState() {
@@ -166,7 +173,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   String _getButtonLabel(String priceText) {
     if (widget.item.isComingSoon) return 'Coming Soon';
     if (isProduct) {
-      if (widget.item.isOutOfStock) return 'Out of Stock';
+      if (isDynamicOutOfStock) return 'Out of Stock'; // Locks the button text
       return 'Buy Product $priceText';
     } else {
       if (_isEnrolled || isInstructor) return 'Start Learning';
@@ -174,7 +181,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
   }
 
-  Widget _buildStatCard(IconData icon, String value, String label, bool isDark) {
+  Widget _buildStatCard(IconData icon, String value, String label, bool isDark, {Color? valueColor}) {
     return Container(
       height: 90, 
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
@@ -189,11 +196,80 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         children: [
           Icon(icon, color: AppTheme.primaryColor, size: 22),
           const SizedBox(height: 6),
-          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: valueColor ?? (isDark ? Colors.white : Colors.black)))),
           const SizedBox(height: 2),
           FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500, fontWeight: FontWeight.w600), textAlign: TextAlign.center)),
         ],
       ),
+    );
+  }
+
+  // CRITICAL FIX 2: Smart Heuristic UI Parser for WYSIWYG Web Specifications
+  Widget _buildSmartSpecificationsGrid(String? htmlSpecs, bool isDark) {
+    if (htmlSpecs == null || htmlSpecs.trim().isEmpty) {
+      return Text('No specifications provided.', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 15));
+    }
+
+    String cleanStr = htmlSpecs
+        .replaceAll(RegExp(r'</?(p|br|tr|li|div|h[1-6])[^>]*>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll(RegExp(r'&nbsp;'), ' ')
+        .replaceAll(RegExp(r'&amp;'), '&');
+
+    List<String> lines = cleanStr.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (lines.isEmpty) return const SizedBox();
+
+    List<Map<String, String>> specs = [];
+    bool hasColons = lines.any((l) => l.contains(':'));
+
+    if (hasColons) {
+      for (String l in lines) {
+        if (l.contains(':')) {
+          var p = l.split(':');
+          specs.add({'key': p[0].trim(), 'val': p.sublist(1).join(':').trim()});
+        } else {
+          if (l.length > 2) specs.add({'key': l, 'val': ''});
+        }
+      }
+    } else {
+      for (int i = 0; i < lines.length; i += 2) {
+        String k = lines[i];
+        String v = (i + 1 < lines.length) ? lines[i + 1] : '';
+        specs.add({'key': k, 'val': v});
+      }
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 20,
+        childAspectRatio: 2.2, // Matches the web UI layout scale
+      ),
+      itemCount: specs.length,
+      itemBuilder: (context, index) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              specs[index]['key']!, 
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600), 
+              maxLines: 1, 
+              overflow: TextOverflow.ellipsis
+            ),
+            const SizedBox(height: 2),
+            if (specs[index]['val']!.isNotEmpty)
+              Text(
+                specs[index]['val']!, 
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), 
+                maxLines: 2, 
+                overflow: TextOverflow.ellipsis
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -206,7 +282,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
        priceText = widget.item.discountPrice > 0 ? '₦${widget.item.discountPrice.toStringAsFixed(0)}' : '₦${widget.item.price.toStringAsFixed(0)}';
     }
 
-    bool isButtonDisabled = widget.item.isComingSoon || (isProduct && widget.item.isOutOfStock);
+    bool isButtonDisabled = widget.item.isComingSoon || isDynamicOutOfStock;
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
@@ -324,7 +400,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                   if (isProduct)
                                     Row(
                                       children: [
-                                        Expanded(child: _buildStatCard(Icons.inventory_2_rounded, _details?['product']?['stock_quantity']?.toString() ?? 'In Stock', 'Availability', isDark)),
+                                        Expanded(child: _buildStatCard(
+                                          Icons.inventory_2_rounded, 
+                                          isDynamicOutOfStock ? 'Out of Stock' : (_details?['product']?['stock_quantity']?.toString() ?? 'In Stock'), 
+                                          'Availability', 
+                                          isDark,
+                                          valueColor: isDynamicOutOfStock ? Colors.redAccent : null
+                                        )),
                                         const SizedBox(width: 8),
                                         Expanded(child: _buildStatCard(Icons.local_shipping_rounded, widget.item.productType == 'digital' ? 'Instant' : 'Shipping', 'Delivery', isDark)),
                                         const SizedBox(width: 8),
@@ -462,11 +544,9 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Specifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Text(
-            _details?['product']?['specifications']?.replaceAll(RegExp(r'<[^>]*>|&[^;]+;'), '') ?? 'No specifications provided.',
-            style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, height: 1.5, fontSize: 15),
-          ),
+          const SizedBox(height: 16),
+          // INJECTING THE SMART UI GRID PARSER HERE
+          _buildSmartSpecificationsGrid(_details?['product']?['specifications'], isDark),
         ],
       ),
     );
