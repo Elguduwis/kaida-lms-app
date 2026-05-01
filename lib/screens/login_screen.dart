@@ -55,15 +55,23 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MainLayout()));
     } else if (result['needs_registration'] == true) {
       if (!mounted) return;
-      KaidaAlert.showModal(context: context, title: 'Almost There', message: 'Please complete your profile details to finish signing up.', isError: false);
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(
-          builder: (_) => RegisterScreen(
-            prefillEmail: result['email'],
-            prefillName: result['name'],
-          )
-        )
+      // FIX: Wait for the user to confirm the modal BEFORE navigating
+      KaidaAlert.showModal(
+        context: context, 
+        title: 'Almost There', 
+        message: 'Please complete your profile details to finish signing up.', 
+        isError: false,
+        onConfirm: () {
+          Navigator.pushReplacement(
+            context, 
+            MaterialPageRoute(
+              builder: (_) => RegisterScreen(
+                prefillEmail: result['email'],
+                prefillName: result['name'],
+              )
+            )
+          );
+        }
       );
     } else {
       if (!mounted) return;
