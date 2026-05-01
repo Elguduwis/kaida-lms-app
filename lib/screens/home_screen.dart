@@ -1,4 +1,3 @@
-import '../utils/kaida_alert.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -8,6 +7,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 import 'course_player_screen.dart';
 import 'catalog_screen.dart';
 import 'item_details_screen.dart';
@@ -128,8 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
           else _wishlistedCourseIds.remove(courseId);
         });
         KaidaAlert.showModal(context: context, title: 'Action Failed', message: data['message'] ?? 'Action failed.', isError: true);
-      } else {
-        KaidaAlert.showModal(context: context, title: 'Success', message: data['message'], isError: false);
       }
     } catch (e) {
       setState(() {
@@ -611,10 +609,9 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isWishlisted = _wishlistedCourseIds.contains(item.id);
 
     return GestureDetector(
+      // CRITICAL FIX: Removed the 'if (!isComingSoon)' block. Now users can always tap to view details!
       onTap: () {
-        if (!isComingSoon) {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
-        }
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
       },
       child: Container(
         width: 220, 

@@ -1,4 +1,3 @@
-import '../widgets/kaida_loader.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -6,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../config/app_theme.dart';
+import '../widgets/kaida_loader.dart';
+import '../utils/kaida_alert.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({Key? key}) : super(key: key);
@@ -45,7 +46,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
   }
 
-  // NATIVE DIRECT DOWNLOAD METHOD
   Future<void> _startNativeDownload(int orderId, int itemId) async {
     setState(() => _downloadingItems.add(itemId));
     
@@ -62,23 +62,23 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       if (data['status'] == 'success') {
         String downloadUrl = data['url'];
         
-        // FIX: Ensure the URL is an absolute web address before launching!
         if (!downloadUrl.startsWith('http')) {
           downloadUrl = 'https://academy.kainuwa.africa/' + downloadUrl.replaceFirst(RegExp(r'^/+'), '');
         }
 
         final Uri url = Uri.parse(downloadUrl);
         
-        // This launches the phone's native file downloader/browser!
         if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
           throw Exception('Could not launch downloader');
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Error generating link')));
+        if (!mounted) return;
+        KaidaAlert.showModal(context: context, title: 'Download Error', message: data['message'] ?? 'Error generating link', isError: true);
       }
     } catch (e) {
       debugPrint("Download error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to initiate download.')));
+      if (!mounted) return;
+      KaidaAlert.showModal(context: context, title: 'Download Failed', message: 'Failed to initiate download. Please check your connection.', isError: true);
     } finally {
       setState(() => _downloadingItems.remove(itemId));
     }
@@ -86,22 +86,28 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic Theme Detectors to prevent blinding white flashes in dark mode
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey;
     final cardColor = isDark ? AppTheme.darkSurfaceColor : Colors.white;
 
     return Scaffold(
-      // Scaffold background is now handled dynamically by your AppTheme
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       appBar: AppBar(
-        title: const Text('My Digital Downloads', style: TextStyle(color: Colors.white, fontSize: 16)), 
-        iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor,
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'My Saved Downloads', 
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)
+        ),
       ),
       body: _isLoading
-          ? Center(child: KaidaLoader())
+          ? const Center(child: KaidaLoader())
           : _downloads.isEmpty
               ? Center(child: Text('You have no digital downloads yet.', style: TextStyle(color: subTextColor, fontSize: 16)))
               : ListView.builder(
@@ -137,9 +143,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         title: Text(item['title'] ?? 'Digital Product', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                         subtitle: Text('Digital Product', style: TextStyle(color: subTextColor, fontSize: 12)),
                         trailing: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDark ? AppTheme.darkSurfaceColor : AppTheme.primaryColor, 
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
+                            side: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.transparent),
+                          ),
                           icon: isDownloading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.download, size: 16, color: Colors.white),
-                          label: Text(isDownloading ? 'Starting...' : 'Download', style: const TextStyle(color: Colors.white)),
+                          label: Text(isDownloading ? 'Starting...' : 'Download', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           onPressed: (isDownloading || orderId == 0) ? null : () => _startNativeDownload(orderId, itemId),
                         ),
                       ),

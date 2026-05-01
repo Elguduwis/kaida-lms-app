@@ -310,7 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistScreen()));
                 }),
                 
-                _buildOptionTile(icon: Icons.store_rounded, title: 'Digital Shop', isDark: isDark, onTap: () {
+                _buildOptionTile(icon: Icons.store_rounded, title: 'Shop', isDark: isDark, onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogScreen(actionType: 'products', title: 'Shop Products')));
                 }),
                 
