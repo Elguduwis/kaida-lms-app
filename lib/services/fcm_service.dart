@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../screens/course_player_screen.dart';
 import '../screens/main_layout.dart';
-import '../screens/catalog_screen.dart'; // FIXED: Added Missing Import
-import '../screens/item_details_screen.dart'; // FIXED: Added Missing Import
+import '../screens/catalog_screen.dart'; 
+import '../screens/item_details_screen.dart'; 
 
 class FcmService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -33,12 +33,16 @@ class FcmService {
       });
 
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        _routeFromNotification(navigatorKey, message.data);
+        // CRITICAL FIX: Delay ensures MainLayout has finished building
+        Future.delayed(const Duration(milliseconds: 500), () {
+            _routeFromNotification(navigatorKey, message.data);
+        });
       });
 
       RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
-        Future.delayed(const Duration(seconds: 3), () {
+        // CRITICAL FIX: Extended wait time for cold boot from Terminated state
+        Future.delayed(const Duration(seconds: 5), () {
           _routeFromNotification(navigatorKey, initialMessage.data);
         });
       }
@@ -54,17 +58,18 @@ class FcmService {
       case 'open_course':
         final courseId = int.tryParse(data['course_id']?.toString() ?? '0') ?? 0;
         final courseTitle = data['course_title']?.toString() ?? 'Course';
+        final slug = data['course_slug']?.toString() ?? '';
         
-        if (courseId > 0) {
+        if (courseId > 0 && slug.isNotEmpty) {
           CatalogItem dummy = CatalogItem(
-            id: courseId, 
-            title: courseTitle, 
-            slug: data['course_slug']?.toString() ?? '', 
-            thumbnailUrl: '', 
-            price: 0, discountPrice: 0, isFree: true, 
-            instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
+            id: courseId, title: courseTitle, slug: slug, 
+            thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', 
+            categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
           ); 
           navigatorKey.currentState!.push(MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: dummy)));
+        } else {
+            // Failsafe: Go to notifications inbox if payload is missing strict data
+            navigatorKey.currentState!.pushAndRemoveUntil(MaterialPageRoute(builder: (context) => const MainLayout(initialIndex: 3)), (route) => false);
         }
         break;
         

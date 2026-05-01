@@ -36,7 +36,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   bool get isProduct => widget.item.type.contains('products'); 
   bool get isInstructor => !isProduct && _details?['course']?['instructor_id']?.toString() == _userId?.toString();
 
-  // CRITICAL FIX 1: Dynamic Stock Guard
   bool get isDynamicOutOfStock {
     if (!isProduct) return false;
     if (widget.item.productType != 'physical') return false;
@@ -81,10 +80,24 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
             });
             if (!isProduct) _initializeVideoPlayer();
           }
+        } else {
+          // CRITICAL FIX: Stop endless loading if course/product is missing
+          if (mounted) {
+            setState(() => _isLoading = false);
+            KaidaAlert.showModal(context: context, title: 'Item Unavailable', message: data['message'] ?? 'Could not load details.', isError: true);
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          KaidaAlert.showModal(context: context, title: 'Connection Error', message: 'Failed to connect to server.', isError: true);
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        KaidaAlert.showModal(context: context, title: 'Error', message: 'An unexpected error occurred.', isError: true);
+      }
     }
   }
 
@@ -173,7 +186,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   String _getButtonLabel(String priceText) {
     if (widget.item.isComingSoon) return 'Coming Soon';
     if (isProduct) {
-      if (isDynamicOutOfStock) return 'Out of Stock'; // Locks the button text
+      if (isDynamicOutOfStock) return 'Out of Stock';
       return 'Buy Product $priceText';
     } else {
       if (_isEnrolled || isInstructor) return 'Start Learning';
@@ -204,40 +217,24 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  // CRITICAL FIX 2: Smart Heuristic UI Parser for WYSIWYG Web Specifications
-  Widget _buildSmartSpecificationsGrid(String? htmlSpecs, bool isDark) {
-    if (htmlSpecs == null || htmlSpecs.trim().isEmpty) {
+  // CRITICAL FIX: Proper JSON Parsing for Specifications
+  Widget _buildSmartSpecificationsGrid(dynamic specsData, bool isDark) {
+    if (specsData == null || specsData.toString().isEmpty) {
       return Text('No specifications provided.', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 15));
     }
 
-    String cleanStr = htmlSpecs
-        .replaceAll(RegExp(r'</?(p|br|tr|li|div|h[1-6])[^>]*>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'<[^>]*>'), '')
-        .replaceAll(RegExp(r'&nbsp;'), ' ')
-        .replaceAll(RegExp(r'&amp;'), '&');
-
-    List<String> lines = cleanStr.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    if (lines.isEmpty) return const SizedBox();
-
-    List<Map<String, String>> specs = [];
-    bool hasColons = lines.any((l) => l.contains(':'));
-
-    if (hasColons) {
-      for (String l in lines) {
-        if (l.contains(':')) {
-          var p = l.split(':');
-          specs.add({'key': p[0].trim(), 'val': p.sublist(1).join(':').trim()});
-        } else {
-          if (l.length > 2) specs.add({'key': l, 'val': ''});
-        }
+    Map<String, dynamic> specsMap = {};
+    try {
+      if (specsData is String) {
+        specsMap = json.decode(specsData);
+      } else if (specsData is Map) {
+        specsMap = Map<String, dynamic>.from(specsData);
       }
-    } else {
-      for (int i = 0; i < lines.length; i += 2) {
-        String k = lines[i];
-        String v = (i + 1 < lines.length) ? lines[i + 1] : '';
-        specs.add({'key': k, 'val': v});
-      }
+    } catch (e) {
+      return Text('Specifications unavailable.', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 15));
     }
+
+    if (specsMap.isEmpty) return Text('No specifications provided.', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 15));
 
     return GridView.builder(
       shrinkWrap: true,
@@ -246,23 +243,26 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         crossAxisCount: 2,
         crossAxisSpacing: 16,
         mainAxisSpacing: 20,
-        childAspectRatio: 2.2, // Matches the web UI layout scale
+        childAspectRatio: 2.2, 
       ),
-      itemCount: specs.length,
+      itemCount: specsMap.length,
       itemBuilder: (context, index) {
+        String key = specsMap.keys.elementAt(index);
+        String val = specsMap[key].toString();
+        
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              specs[index]['key']!, 
+              key, 
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600), 
               maxLines: 1, 
               overflow: TextOverflow.ellipsis
             ),
             const SizedBox(height: 2),
-            if (specs[index]['val']!.isNotEmpty)
+            if (val.isNotEmpty)
               Text(
-                specs[index]['val']!, 
+                val, 
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), 
                 maxLines: 2, 
                 overflow: TextOverflow.ellipsis
@@ -489,13 +489,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                         child: ElevatedButton(
                           onPressed: isButtonDisabled ? null : _handlePrimaryAction,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isButtonDisabled ? (isDark ? Colors.grey.shade800 : Colors.grey.shade400) : AppTheme.primaryColor,
+                            // CRITICAL FIX: Improved Contrast for Disabled Button
+                            backgroundColor: isButtonDisabled ? (isDark ? Colors.grey.shade700 : Colors.grey.shade400) : AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                             elevation: 0,
                           ),
                           child: Text(
                             _getButtonLabel(priceText),
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isButtonDisabled ? Colors.grey.shade300 : Colors.white),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ),
                       ),
@@ -545,7 +546,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         children: [
           const Text('Specifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          // INJECTING THE SMART UI GRID PARSER HERE
           _buildSmartSpecificationsGrid(_details?['product']?['specifications'], isDark),
         ],
       ),
@@ -731,7 +731,6 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return WillPopScope(
       onWillPop: _goBack,
       child: Scaffold(
@@ -740,29 +739,11 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
-            onPressed: () async {
-              if (await _controller.canGoBack()) {
-                _controller.goBack();
-              } else {
-                Navigator.pop(context);
-              }
-            },
-          ),
+          leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20), onPressed: () async { if (await _controller.canGoBack()) { _controller.goBack(); } else { Navigator.pop(context); } }),
           title: Text(widget.title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
           actions: [
-            IconButton(
-              icon: Icon(Icons.home_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
-              onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout()), (route) => false)
-            ),
-            IconButton(
-              icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black, size: 22), 
-              onPressed: () {
-                setState(() { _hasError = false; _isLoading = true; });
-                _controller.loadRequest(Uri.parse(widget.url)); 
-              }
-            ),
+            IconButton(icon: Icon(Icons.home_rounded, color: isDark ? Colors.white : Colors.black, size: 22), onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout()), (route) => false)),
+            IconButton(icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black, size: 22), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.loadRequest(Uri.parse(widget.url)); }),
             const SizedBox(width: 8),
           ],
         ),
@@ -771,26 +752,7 @@ class _CheckoutWebViewScreenState extends State<CheckoutWebViewScreen> {
             WebViewWidget(controller: _controller),
             if (_isLoading && !_hasError) Container(color: isDark ? AppTheme.darkBackgroundColor : Colors.white, child: const Center(child: KaidaLoader())),
             if (_hasError)
-              Container(
-                color: isDark ? AppTheme.darkBackgroundColor : Colors.white,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.loadRequest(Uri.parse(widget.url)); },
-                        icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                        label: const Text('Try Again', style: TextStyle(color: Colors.white))
-                      )
-                    ],
-                  ),
-                ),
-              ),
+              Container(color: isDark ? AppTheme.darkBackgroundColor : Colors.white, child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.cloud_off_rounded, size: 80, color: Colors.grey), const SizedBox(height: 16), Text('Connection Failed', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)), const SizedBox(height: 24), ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), onPressed: () { setState(() { _hasError = false; _isLoading = true; }); _controller.loadRequest(Uri.parse(widget.url)); }, icon: const Icon(Icons.refresh_rounded, color: Colors.white), label: const Text('Try Again', style: TextStyle(color: Colors.white)))]))),
           ],
         ),
       ),

@@ -1,4 +1,3 @@
-import '../utils/kaida_alert.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -45,7 +44,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
           List<dynamic> list = data['data'];
           List<CatalogItem> parsedList = [];
           for (var item in list) {
-            try { parsedList.add(CatalogItem.fromJson(item, 'courses')); } catch (e) {}
+            String iType = item['item_type'] == 'product' ? 'products' : 'courses';
+            try { parsedList.add(CatalogItem.fromJson(item, iType)); } catch (e) {}
           }
           if (mounted) {
             setState(() {
@@ -60,22 +60,21 @@ class _WishlistScreenState extends State<WishlistScreen> {
     }
   }
 
-  Future<void> _removeFromWishlist(int courseId) async {
+  Future<void> _removeFromWishlist(int itemId, String type) async {
     if (_userId == null) return;
 
-    // Optimistic UI Removal
     setState(() {
-      _wishlistedItems.removeWhere((item) => item.id == courseId);
+      _wishlistedItems.removeWhere((item) => item.id == itemId);
     });
 
     try {
       await http.post(
         Uri.parse(ApiConfig.toggleWishlist),
-        body: {'user_id': _userId.toString(), 'item_id': courseId.toString(), 'item_type': 'course'}
+        body: {'user_id': _userId.toString(), 'item_id': itemId.toString(), 'item_type': type == 'products' ? 'product' : 'course'}
       );
-      KaidaAlert.showModal(context: context, title: 'Removed', message: 'Course removed from wishlist.', isError: false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from wishlist'), duration: Duration(seconds: 1)));
     } catch (e) {
-      _fetchWishlist(); // Re-fetch if API failed
+      _fetchWishlist(); 
     }
   }
 
@@ -107,7 +106,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                         const SizedBox(height: 16),
                         Text('Wishlist Empty', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
                         const SizedBox(height: 8),
-                        Text('Courses you favorite will appear here.', style: TextStyle(color: Colors.grey.shade500)),
+                        Text('Items you favorite will appear here.', style: TextStyle(color: Colors.grey.shade500)),
                       ],
                     ),
                   )
@@ -136,6 +135,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
     if (item.price > 0 && item.discountPrice > 0 && item.discountPrice < item.price) {
       discountPercent = (((item.price - item.discountPrice) / item.price) * 100).round();
     }
+    
+    bool isProductMode = item.type.contains('products');
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item))).then((_) => _fetchWishlist()),
@@ -155,7 +156,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   child: item.thumbnailUrl.isNotEmpty
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 110, width: double.infinity, fit: BoxFit.cover)
-                      : Container(height: 110, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
+                      : Container(height: 110, color: AppTheme.primaryColor.withOpacity(0.2), child: Icon(isProductMode ? Icons.shopping_bag_rounded : Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
                 if (discountPercent > 0 && !item.isComingSoon)
                   Positioned(
@@ -169,7 +170,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 Positioned(
                   top: 6, right: 6,
                   child: GestureDetector(
-                    onTap: () => _removeFromWishlist(item.id),
+                    onTap: () => _removeFromWishlist(item.id, item.type),
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(color: isDark ? Colors.black54 : Colors.white.withOpacity(0.9), shape: BoxShape.circle),
@@ -189,6 +190,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(child: Text(item.categoryName.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5), overflow: TextOverflow.ellipsis)),
+                        if (!isProductMode)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                            child: Text(item.language.toUpperCase(), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 8, fontWeight: FontWeight.bold)),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -196,9 +203,9 @@ class _WishlistScreenState extends State<WishlistScreen> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.person_rounded, size: 12, color: Colors.grey),
+                        Icon(isProductMode ? Icons.store_rounded : Icons.person_rounded, size: 12, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Expanded(child: Text(item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(child: Text(isProductMode ? (item.productType.toUpperCase()) : item.instructorName, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                     const Spacer(),
