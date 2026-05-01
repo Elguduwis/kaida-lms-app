@@ -44,6 +44,47 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     return qty <= 0;
   }
 
+  // --- CRITICAL FIX: SELF-HEALING UI GETTERS ---
+  // These will overwrite the "Dummy" push notification data the moment the API responds!
+  String get displayTitle => (!isProduct ? _details?['course']?['title'] : _details?['product']?['name'])?.toString() ?? widget.item.title;
+  String get displayCategory => (!isProduct ? _details?['course']?['category_name'] : _details?['product']?['category_name'])?.toString() ?? widget.item.categoryName;
+  String get displayInstructor => isProduct ? 'Kainuwa Store' : (_details?['course']?['instructor_name']?.toString() ?? widget.item.instructorName);
+  
+  String get displayImageUrl {
+    String url = (!isProduct ? _details?['course']?['thumbnail_url'] : _details?['product']?['thumbnail_path'])?.toString() ?? widget.item.thumbnailUrl;
+    if (url.isNotEmpty && !url.startsWith('http')) url = 'https://academy.kainuwa.africa/' + url.replaceFirst(RegExp(r'^/+'), '');
+    return url;
+  }
+
+  bool get displayIsFree {
+    var freeFlag = (!isProduct ? _details?['course']?['is_free'] : _details?['product']?['is_free']);
+    if (freeFlag != null) return freeFlag == 1 || freeFlag == '1' || freeFlag == true;
+    return widget.item.isFree;
+  }
+
+  double get displayPrice {
+    var p = (!isProduct ? _details?['course']?['price'] : _details?['product']?['price']);
+    if (p != null) return double.tryParse(p.toString()) ?? 0.0;
+    return widget.item.price;
+  }
+
+  double get displayDiscountPrice {
+    var p = (!isProduct ? _details?['course']?['discount_price'] : _details?['product']?['discount_price']);
+    if (p != null) return double.tryParse(p.toString()) ?? 0.0;
+    return widget.item.discountPrice;
+  }
+  
+  bool get displayIsComingSoon {
+    if (isProduct) return false;
+    var releaseDate = _details?['course']?['release_date'];
+    if (releaseDate != null) {
+       DateTime? d = DateTime.tryParse(releaseDate.toString());
+       if (d != null && d.isAfter(DateTime.now())) return true;
+    }
+    return widget.item.isComingSoon;
+  }
+  // ---------------------------------------------
+
   @override
   void initState() {
     super.initState();
@@ -81,23 +122,14 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
             if (!isProduct) _initializeVideoPlayer();
           }
         } else {
-          // CRITICAL FIX: Stop endless loading if course/product is missing
           if (mounted) {
             setState(() => _isLoading = false);
-            KaidaAlert.showModal(context: context, title: 'Item Unavailable', message: data['message'] ?? 'Could not load details.', isError: true);
+            KaidaAlert.showModal(context: context, title: 'Unavailable', message: data['message'] ?? 'Could not load details.', isError: true);
           }
-        }
-      } else {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          KaidaAlert.showModal(context: context, title: 'Connection Error', message: 'Failed to connect to server.', isError: true);
         }
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        KaidaAlert.showModal(context: context, title: 'Error', message: 'An unexpected error occurred.', isError: true);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -149,8 +181,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     setState(() => _isWishlisted = !_isWishlisted);
 
     try {
+      // Hardcoded path to prevent ApiConfig trailing slash bugs
+      String apiUrl = '${ApiConfig.baseUrl}/toggle_wishlist.php'.replaceAll('//toggle', '/toggle');
       final response = await http.post(
-        Uri.parse(ApiConfig.toggleWishlist),
+        Uri.parse(apiUrl),
         body: {'user_id': _userId.toString(), 'item_id': widget.item.id.toString(), 'item_type': isProduct ? 'product' : 'course'}
       );
       final data = json.decode(response.body);
@@ -167,7 +201,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     }
 
     if ((_isEnrolled || isInstructor) && !isProduct) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: widget.item.title)));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => CoursePlayerScreen(courseId: widget.item.id, courseTitle: displayTitle)));
     } else {
       String targetPath = isProduct 
           ? '/api/mobile/buy_now.php?product_id=${widget.item.id}' 
@@ -184,7 +218,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
   }
 
   String _getButtonLabel(String priceText) {
-    if (widget.item.isComingSoon) return 'Coming Soon';
+    if (displayIsComingSoon) return 'Coming Soon';
     if (isProduct) {
       if (isDynamicOutOfStock) return 'Out of Stock';
       return 'Buy Product $priceText';
@@ -217,7 +251,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  // CRITICAL FIX: Proper JSON Parsing for Specifications
   Widget _buildSmartSpecificationsGrid(dynamic specsData, bool isDark) {
     if (specsData == null || specsData.toString().isEmpty) {
       return Text('No specifications provided.', style: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, fontSize: 15));
@@ -239,12 +272,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 20,
-        childAspectRatio: 2.2, 
-      ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 20, childAspectRatio: 2.2),
       itemCount: specsMap.length,
       itemBuilder: (context, index) {
         String key = specsMap.keys.elementAt(index);
@@ -253,20 +281,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              key, 
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600), 
-              maxLines: 1, 
-              overflow: TextOverflow.ellipsis
-            ),
+            Text(key, style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             if (val.isNotEmpty)
-              Text(
-                val, 
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), 
-                maxLines: 2, 
-                overflow: TextOverflow.ellipsis
-              ),
+              Text(val, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
         );
       },
@@ -278,11 +296,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     String priceText = 'Free';
-    if (!widget.item.isFree) {
-       priceText = widget.item.discountPrice > 0 ? '₦${widget.item.discountPrice.toStringAsFixed(0)}' : '₦${widget.item.price.toStringAsFixed(0)}';
+    if (!displayIsFree) {
+       priceText = displayDiscountPrice > 0 ? '₦${displayDiscountPrice.toStringAsFixed(0)}' : '₦${displayPrice.toStringAsFixed(0)}';
     }
 
-    bool isButtonDisabled = widget.item.isComingSoon || isDynamicOutOfStock;
+    bool isButtonDisabled = displayIsComingSoon || isDynamicOutOfStock;
+    String instructorAvatar = _details?['course']?['instructor_avatar']?.toString() ?? '';
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
@@ -333,8 +352,8 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                       width: double.infinity,
                                       decoration: BoxDecoration(
                                         color: isDark ? Colors.black26 : Colors.grey.shade100,
-                                        image: widget.item.thumbnailUrl.isNotEmpty ? DecorationImage(
-                                          image: CachedNetworkImageProvider(widget.item.thumbnailUrl),
+                                        image: displayImageUrl.isNotEmpty ? DecorationImage(
+                                          image: CachedNetworkImageProvider(displayImageUrl),
                                           fit: BoxFit.cover,
                                         ) : null,
                                       ),
@@ -378,7 +397,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(widget.item.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.2)),
+                                  Text(displayTitle, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, height: 1.2)),
                                   const SizedBox(height: 12),
                                   
                                   Row(
@@ -391,7 +410,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                                       const SizedBox(width: 12),
                                       Container(height: 14, width: 1.5, color: Colors.grey.shade300),
                                       const SizedBox(width: 12),
-                                      Text(widget.item.categoryName, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)),
+                                      Text(displayCategory, style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 14)),
                                     ],
                                   ),
                                   
@@ -467,7 +486,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                       _buildProductDetailsTab(isDark),
                       _buildReviewsTab(isDark),
                     ] : [
-                      _buildAboutTab(isDark),
+                      _buildAboutTab(isDark, instructorAvatar),
                       _buildLessonsTab(isDark),
                       _buildReviewsTab(isDark),
                     ],
@@ -489,7 +508,6 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
                         child: ElevatedButton(
                           onPressed: isButtonDisabled ? null : _handlePrimaryAction,
                           style: ElevatedButton.styleFrom(
-                            // CRITICAL FIX: Improved Contrast for Disabled Button
                             backgroundColor: isButtonDisabled ? (isDark ? Colors.grey.shade700 : Colors.grey.shade400) : AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                             elevation: 0,
@@ -508,7 +526,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
     );
   }
 
-  Widget _buildAboutTab(bool isDark) {
+  Widget _buildAboutTab(bool isDark, [String? avatarUrl]) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
       child: Column(
@@ -519,10 +537,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 radius: 25,
-                backgroundImage: CachedNetworkImageProvider(_details?['course']?['instructor_avatar'] ?? ''),
                 backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty) ? CachedNetworkImageProvider(avatarUrl) : null,
+                child: (avatarUrl == null || avatarUrl.isEmpty) ? const Icon(Icons.person_rounded, color: AppTheme.primaryColor) : null,
               ),
-              title: Text(widget.item.instructorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              title: Text(displayInstructor, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               subtitle: Text(_details?['course']?['instructor_headline'] ?? 'Professional Instructor', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
             ),
             const SizedBox(height: 24),
@@ -573,7 +592,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> with SingleTicker
               decoration: BoxDecoration(
                 color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
-                image: widget.item.thumbnailUrl.isNotEmpty ? DecorationImage(image: CachedNetworkImageProvider(widget.item.thumbnailUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken)) : null,
+                image: displayImageUrl.isNotEmpty ? DecorationImage(image: CachedNetworkImageProvider(displayImageUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.6), BlendMode.darken)) : null,
               ),
               child: Center(child: Text((index + 1).toString().padLeft(2, '0'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
             ),
