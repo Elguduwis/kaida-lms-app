@@ -165,7 +165,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'session_id': _currentSessionId?.toString() ?? '0',
           'message': text,
         },
-      ).timeout(const Duration(seconds: 95));
+      ).timeout(const Duration(seconds: 130)); // Expanded client wait time
 
       if (response.statusCode == 200 && !response.body.trim().startsWith('<')) {
         final data = json.decode(response.body);
@@ -189,8 +189,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
               _isTyping = false;
             });
             _scrollToBottom();
-            
-            // INSTANT SYNC: Force the history to reload so it appears in the drawer immediately
             await _loadSessions();
           }
         } else {
@@ -202,7 +200,13 @@ class _AiChatScreenState extends State<AiChatScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add(ChatMessage(text: "Kainuwa AI connection failed. Tap retry.", isUser: false, isError: true));
+          String errText = "Connection timeout. The free AI provider is currently busy.";
+          String cleanError = e.toString().replaceAll('Exception: ', '');
+          if (cleanError.contains('overloaded') || cleanError.contains('failed to generate') || cleanError.contains('timeout')) {
+              errText = cleanError;
+          }
+          // CRITICAL FIX: Pushing the precise error message with isError = true to trigger the Retry UI
+          _messages.add(ChatMessage(text: "$errText Tap to retry.", isUser: false, isError: true));
           _isTyping = false;
         });
         _scrollToBottom();
@@ -270,7 +274,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: isDark ? AppTheme.darkSurfaceColor : Colors.white, borderRadius: BorderRadius.circular(16)),
-                  child: const Text('Kainuwa AI is typing...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+                  child: const Text('Kainuwa AI is thinking...', style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
                 ),
               ),
             ),
@@ -307,7 +311,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
       child: SafeArea(
         child: Column(
           children: [
-            // FIXED: Removed the solid purple background to match standard theme
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
@@ -331,7 +334,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         leading: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                         title: Text(session['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
                         onTap: () => _loadHistory(int.parse(session['id'].toString())),
-                        // FIXED: Swapped the delete bin for a clean 'X' icon
                         trailing: IconButton(
                           icon: const Icon(Icons.close, color: Colors.red, size: 20),
                           onPressed: () => _deleteSession(int.parse(session['id'].toString())),
@@ -384,10 +386,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessage message, bool isDark) {
+    // CRITICAL FIX: Explicitly rendering the Retry Outline Button if an error occurs
     if (message.isError) {
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
-        alignment: Alignment.center,
+        alignment: Alignment.centerLeft,
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.redAccent, 
@@ -396,7 +399,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)
           ),
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: Text(message.text, style: const TextStyle(fontWeight: FontWeight.bold)),
+          label: Flexible(child: Text(message.text, style: const TextStyle(fontWeight: FontWeight.bold))),
           onPressed: () => _handleSubmitted(_lastFailedPrompt, isRetry: true),
         ),
       );
@@ -452,7 +455,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           onTapLink: (text, href, title) async {
                             if (href != null && href.startsWith('kaida://course/')) {
                               final slug = href.replaceAll('kaida://course/', '');
-                              showDialog(context: context, barrierDismissible: false, builder: (BuildContext c) => const Center(child: CircularProgressIndicator()));
+                              showDialog(context: context, barrierDismissible: false, builder: (BuildContext c) => const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)));
                               try {
                                 final response = await http.get(Uri.parse('${ApiConfig.baseUrl}/catalog.php?action=courses'));
                                 Navigator.pop(context); 
