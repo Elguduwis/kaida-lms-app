@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _userName = "Learner"; 
   String? _userAvatar;
+  int _unreadNotifications = 0; // NEW: Holds the red badge count
 
   List<dynamic> _banners = [];
   List<dynamic> _categories = [];
@@ -49,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchDashboardData();
     _fetchCatalogData();
     _fetchWishlist();
+    _fetchUnreadCount(); // NEW: Fetch notifications on load
     _startBannerTimer();
   }
 
@@ -78,6 +80,30 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Good Morning,';
     if (hour < 17) return 'Good Afternoon,';
     return 'Good Evening,';
+  }
+
+  // NEW: Fetch unread notifications count silently
+  Future<void> _fetchUnreadCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('user_id');
+    if (userId == null) return;
+
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/notifications_api.php'),
+        body: {'action': 'get', 'user_id': userId.toString()}
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'success' && mounted) {
+          setState(() {
+            _unreadNotifications = int.tryParse(data['unread_count'].toString()) ?? 0;
+          });
+        }
+      }
+    } catch (e) {
+      // Silent fail for background check
+    }
   }
 
   Future<void> _fetchWishlist() async {
@@ -233,6 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
             await _fetchDashboardData();
             await _fetchCatalogData();
             await _fetchWishlist();
+            await _fetchUnreadCount(); // Refresh badge on pull
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -315,12 +342,39 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 12),
+          
+          // CRITICAL FIX: The Dynamic Red Dot Badge
           GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()))
+                .then((_) => _fetchUnreadCount()); // Re-check badge when user returns
+            },
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade200)),
-              child: const Icon(Icons.notifications_none_rounded, size: 20),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.notifications_none_rounded, size: 20),
+                  if (_unreadNotifications > 0)
+                    Positioned(
+                      top: -2,
+                      right: -2,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: isDark ? AppTheme.darkBackgroundColor : Colors.white, width: 1.5),
+                        ),
+                        child: Text(
+                          _unreadNotifications > 9 ? '9+' : '$_unreadNotifications',
+                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -609,7 +663,6 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isWishlisted = _wishlistedCourseIds.contains(item.id);
 
     return GestureDetector(
-      // CRITICAL FIX: Removed the 'if (!isComingSoon)' block. Now users can always tap to view details!
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: item)));
       },
