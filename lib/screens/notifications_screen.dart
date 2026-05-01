@@ -10,6 +10,8 @@ import '../widgets/kaida_loader.dart';
 import '../utils/kaida_alert.dart';
 import 'course_player_screen.dart';
 import 'main_layout.dart';
+import 'catalog_screen.dart'; // FIXED: Added Missing Import
+import 'item_details_screen.dart'; // FIXED: Added Missing Import
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -41,11 +43,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     try {
       String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
-      
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        body: {'action': 'get', 'user_id': _userId.toString()}
-      );
+      final response = await http.post(Uri.parse(apiUrl), body: {'action': 'get', 'user_id': _userId.toString()});
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -59,7 +57,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  // CORE FIX: Grouping logic for "Today", "Yesterday", etc.
   void _processNotifications(List<dynamic> data) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -115,7 +112,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (actionType == 'open_course') {
       int courseId = int.tryParse(notif['course_id']?.toString() ?? '0') ?? 0;
       if (courseId > 0) {
-        CatalogItem dummy = CatalogItem(id: courseId, title: notif['title'] ?? 'Course', slug: notif['course_slug']?.toString() ?? '', thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'); Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: dummy)));
+        CatalogItem dummy = CatalogItem(
+          id: courseId, title: notif['title'] ?? 'Course', slug: notif['course_slug']?.toString() ?? '', 
+          thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', 
+          categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
+        ); 
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: dummy)));
       }
     } else if (actionType == 'open_dashboard') {
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout(initialIndex: 3)), (route) => false);
@@ -127,9 +129,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _markAllAsRead() async {
     if (_userId == null || _rawNotifications.isEmpty) return;
-    setState(() { 
-      for (var n in _rawNotifications) { n['is_read'] = 1; } 
-    });
+    setState(() { for (var n in _rawNotifications) { n['is_read'] = 1; } });
     try {
       String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
       await http.post(Uri.parse(apiUrl), body: {'action': 'mark_all_read', 'user_id': _userId.toString()});
@@ -156,10 +156,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context, true), 
-        ),
+        leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20), onPressed: () => Navigator.pop(context, true)),
         title: Text('Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
         actions: [
           if (_rawNotifications.isNotEmpty)
@@ -190,23 +187,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 itemBuilder: (context, index) {
                   final item = _groupedItems[index];
 
-                  // 1. RENDER HEADER (Today, Yesterday, etc)
                   if (item is Map && item.containsKey('is_header')) {
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
                       child: Text(
                         item['title'].toString().toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
-                          letterSpacing: 1.2,
-                        ),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, letterSpacing: 1.2),
                       ),
                     );
                   }
 
-                  // 2. RENDER NOTIFICATION TILE
                   final notif = item;
                   bool isRead = notif['is_read'] == 1 || notif['is_read'] == '1';
                   String imageUrl = notif['image_url']?.toString() ?? '';

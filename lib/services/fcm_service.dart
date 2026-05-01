@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../screens/course_player_screen.dart';
 import '../screens/main_layout.dart';
+import '../screens/catalog_screen.dart'; // FIXED: Added Missing Import
+import '../screens/item_details_screen.dart'; // FIXED: Added Missing Import
 
 class FcmService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
@@ -17,7 +19,6 @@ class FcmService {
     );
     
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // CRITICAL FIX: Force heads-up banners even when the app is open in the foreground
       await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
         alert: true, 
         badge: true, 
@@ -31,12 +32,10 @@ class FcmService {
         _saveTokenToServer(newToken);
       });
 
-      // Handle Background Clicks
       FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
         _routeFromNotification(navigatorKey, message.data);
       });
 
-      // Handle Terminated Clicks
       RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
         Future.delayed(const Duration(seconds: 3), () {
@@ -57,11 +56,15 @@ class FcmService {
         final courseTitle = data['course_title']?.toString() ?? 'Course';
         
         if (courseId > 0) {
-          CatalogItem dummy = CatalogItem(id: courseId, title: courseTitle, slug: data['course_slug']?.toString() ?? '', thumbnailUrl: '', price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'); navigatorKey.currentState!.push(MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: dummy)));//
-            MaterialPageRoute(
-              builder: (context) => CoursePlayerScreen(courseId: courseId, courseTitle: courseTitle),
-            ),
-          );
+          CatalogItem dummy = CatalogItem(
+            id: courseId, 
+            title: courseTitle, 
+            slug: data['course_slug']?.toString() ?? '', 
+            thumbnailUrl: '', 
+            price: 0, discountPrice: 0, isFree: true, 
+            instructorName: 'Loading...', categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
+          ); 
+          navigatorKey.currentState!.push(MaterialPageRoute(builder: (context) => ItemDetailsScreen(item: dummy)));
         }
         break;
         
@@ -80,16 +83,10 @@ class FcmService {
   Future<void> _saveTokenToServer(String token) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('user_id');
-    
     if (userId != null) {
       try {
-        await http.post(
-          Uri.parse(ApiConfig.saveFcmToken),
-          body: {'user_id': userId.toString(), 'token': token},
-        );
-      } catch (e) {
-        // Silent fail
-      }
+        await http.post(Uri.parse(ApiConfig.saveFcmToken), body: {'user_id': userId.toString(), 'token': token});
+      } catch (e) {}
     }
   }
 }

@@ -52,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchCatalogData();
     _fetchWishlist();
     _fetchUnreadCount(); 
-    _syncFcmToken(); // Silent background sync
+    _syncFcmToken(); 
     _startBannerTimer();
   }
 
@@ -84,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Good Evening,';
   }
 
-  // FIXED: Graceful, silent background sync
   Future<void> _syncFcmToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -102,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } catch (e) {
-      // Silent fail
+      // Silent
     }
   }
 
@@ -126,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      // Silent fail
+      // Silent
     }
   }
 
@@ -233,18 +232,16 @@ class _HomeScreenState extends State<HomeScreen> {
           List<dynamic> list = data['data'];
           List<CatalogItem> active = [];
           List<CatalogItem> coming = [];
-          DateTime now = DateTime.now();
           
           for (var item in list) {
             try {
-              bool isComingSoon = false;
-              if (item['release_date'] != null) {
-                DateTime? release = DateTime.tryParse(item['release_date'].toString());
-                if (release != null && release.isAfter(now)) isComingSoon = true;
-              }
               CatalogItem parsed = CatalogItem.fromJson(item, 'courses');
-              if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
-                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))), coming.add(parsed); else active.add(parsed);
+              // FIXED LOGIC HERE: Correctly separating lists without breaking UI
+              if (parsed.isComingSoon) {
+                coming.add(parsed);
+              } else {
+                active.add(parsed);
+              }
             } catch (e) {}
           }
           if (mounted) {
@@ -710,7 +707,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? CachedNetworkImage(imageUrl: item.thumbnailUrl, height: 120, width: double.infinity, fit: BoxFit.cover)
                       : Container(height: 120, color: AppTheme.primaryColor.withOpacity(0.2), child: const Icon(Icons.school_rounded, size: 40, color: AppTheme.primaryColor)),
                 ),
-                if (discountPercent > 0 && !isComingSoon)
+                if (discountPercent > 0 && !isComingSoon && !item.isOutOfStock)
                   Positioned(
                     top: 10, left: 10,
                     child: Container(
@@ -719,7 +716,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text('-$discountPercent%', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                   ),
-                if (!isComingSoon)
+                if (!isComingSoon && !item.isOutOfStock)
                   Positioned(
                     top: 8, right: 8,
                     child: GestureDetector(
@@ -738,9 +735,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
-                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
-                  Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30))),
+                // FIXED UI STACKING LOGIC
+                if (isComingSoon)
+                  Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
+                else if (item.isOutOfStock)
+                  Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
               ],
             ),
             Padding(
@@ -770,9 +769,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (isComingSoon) Container(height: 120, color: Colors.black54, child: const Center(child: Icon(Icons.lock_clock_rounded, color: Colors.white, size: 30)))
-                else if (item.isOutOfStock) Container(height: 120, color: Colors.black54, child: const Center(child: Text('OUT OF STOCK', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)))),
+                  if (isComingSoon)
                     const Text('COMING SOON', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13))
+                  else if (item.isOutOfStock)
+                    const Text('UNAVAILABLE', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12))
                   else if (item.isFree || (item.price == 0 && item.discountPrice == 0))
                     const Text('FREE', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14))
                   else if (item.discountPrice > 0 && item.discountPrice < item.price)
