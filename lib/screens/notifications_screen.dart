@@ -20,7 +20,8 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
-  List<dynamic> _notifications = [];
+  List<dynamic> _groupedItems = []; 
+  List<dynamic> _rawNotifications = [];
   int? _userId;
 
   @override
@@ -39,23 +40,62 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     try {
+      String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
+      
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications_api.php'),
+        Uri.parse(apiUrl),
         body: {'action': 'get', 'user_id': _userId.toString()}
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'success' && mounted) {
-          setState(() {
-            _notifications = data['data'];
-            _isLoading = false;
-          });
+          _rawNotifications = data['data'];
+          _processNotifications(_rawNotifications);
         }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // CORE FIX: Grouping logic for "Today", "Yesterday", etc.
+  void _processNotifications(List<dynamic> data) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final lastWeek = today.subtract(const Duration(days: 7));
+
+    List<dynamic> todayList = [];
+    List<dynamic> yesterdayList = [];
+    List<dynamic> lastWeekList = [];
+    List<dynamic> olderList = [];
+
+    for (var notif in data) {
+      DateTime dt = DateTime.tryParse(notif['created_at']?.toString() ?? '') ?? DateTime.now();
+      DateTime date = DateTime(dt.year, dt.month, dt.day);
+
+      if (date == today) {
+        todayList.add(notif);
+      } else if (date == yesterday) {
+        yesterdayList.add(notif);
+      } else if (date.isAfter(lastWeek)) {
+        lastWeekList.add(notif);
+      } else {
+        olderList.add(notif);
+      }
+    }
+
+    List<dynamic> grouped = [];
+    if (todayList.isNotEmpty) { grouped.add({'is_header': true, 'title': 'Today'}); grouped.addAll(todayList); }
+    if (yesterdayList.isNotEmpty) { grouped.add({'is_header': true, 'title': 'Yesterday'}); grouped.addAll(yesterdayList); }
+    if (lastWeekList.isNotEmpty) { grouped.add({'is_header': true, 'title': 'Last 7 Days'}); grouped.addAll(lastWeekList); }
+    if (olderList.isNotEmpty) { grouped.add({'is_header': true, 'title': 'Older'}); grouped.addAll(olderList); }
+
+    setState(() {
+      _groupedItems = grouped;
+      _isLoading = false;
+    });
   }
 
   Future<void> _markAsReadAndRoute(Map<String, dynamic> notif) async {
@@ -64,18 +104,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     int notifId = int.tryParse(notif['id'].toString()) ?? 0;
     bool isRead = notif['is_read'] == 1 || notif['is_read'] == '1';
 
-    // Optimistic UI Update
     if (!isRead) {
-      setState(() {
-        notif['is_read'] = 1;
-      });
-      http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications_api.php'),
-        body: {'action': 'mark_read', 'user_id': _userId.toString(), 'notification_id': notifId.toString()}
-      );
+      setState(() { notif['is_read'] = 1; });
+      String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
+      http.post(Uri.parse(apiUrl), body: {'action': 'mark_read', 'user_id': _userId.toString(), 'notification_id': notifId.toString()});
     }
 
-    // Handle Action Routing
     String actionType = notif['action_type']?.toString() ?? 'open_app';
     
     if (actionType == 'open_course') {
@@ -86,38 +120,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (actionType == 'open_dashboard') {
       Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainLayout(initialIndex: 3)), (route) => false);
     } else if (actionType == 'open_store') {
-      final url = Uri.parse("market://details?id=com.kainuwa.academy"); // Update with your actual package name
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      }
+      final url = Uri.parse("market://details?id=com.kainuwa.academy"); 
+      if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 
   Future<void> _markAllAsRead() async {
-    if (_userId == null || _notifications.isEmpty) return;
-    
-    setState(() {
-      for (var n in _notifications) { n['is_read'] = 1; }
+    if (_userId == null || _rawNotifications.isEmpty) return;
+    setState(() { 
+      for (var n in _rawNotifications) { n['is_read'] = 1; } 
     });
-
     try {
-      await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/notifications_api.php'),
-        body: {'action': 'mark_all_read', 'user_id': _userId.toString()}
-      );
+      String apiUrl = '${ApiConfig.baseUrl}/notifications_api.php'.replaceAll('//notifications_api', '/notifications_api');
+      await http.post(Uri.parse(apiUrl), body: {'action': 'mark_all_read', 'user_id': _userId.toString()});
       KaidaAlert.showModal(context: context, title: 'Cleared', message: 'All notifications marked as read.', isError: false);
-    } catch (e) {
-      // Silent fail
-    }
+    } catch (e) {}
   }
 
   String _formatTime(String timestamp) {
     DateTime dt = DateTime.tryParse(timestamp) ?? DateTime.now();
     Duration diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
-    return 'Just now';
+    if (diff.inDays > 0) return '${diff.inDays}d';
+    if (diff.inHours > 0) return '${diff.inHours}h';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m';
+    return 'Now';
   }
 
   @override
@@ -132,21 +158,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         centerTitle: true,
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context, true), // Returns true so Home knows to refresh the badge
+          onPressed: () => Navigator.pop(context, true), 
         ),
         title: Text('Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
         actions: [
-          if (_notifications.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.done_all_rounded, color: AppTheme.primaryColor, size: 24),
-              onPressed: _markAllAsRead,
-              tooltip: 'Mark all as read',
-            ),
+          if (_rawNotifications.isNotEmpty)
+            IconButton(icon: Icon(Icons.done_all_rounded, color: AppTheme.primaryColor, size: 24), onPressed: _markAllAsRead, tooltip: 'Mark all as read'),
         ],
       ),
       body: _isLoading 
         ? const Center(child: KaidaLoader())
-        : _notifications.isEmpty
+        : _groupedItems.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -162,12 +184,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           : RefreshIndicator(
               color: AppTheme.primaryColor,
               onRefresh: _fetchNotifications,
-              child: ListView.separated(
+              child: ListView.builder(
                 physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: _notifications.length,
-                separatorBuilder: (context, index) => Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+                itemCount: _groupedItems.length,
                 itemBuilder: (context, index) {
-                  final notif = _notifications[index];
+                  final item = _groupedItems[index];
+
+                  // 1. RENDER HEADER (Today, Yesterday, etc)
+                  if (item is Map && item.containsKey('is_header')) {
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                      child: Text(
+                        item['title'].toString().toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    );
+                  }
+
+                  // 2. RENDER NOTIFICATION TILE
+                  final notif = item;
                   bool isRead = notif['is_read'] == 1 || notif['is_read'] == '1';
                   String imageUrl = notif['image_url']?.toString() ?? '';
 
@@ -175,11 +215,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onTap: () => _markAsReadAndRoute(notif),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      color: isRead ? Colors.transparent : (isDark ? AppTheme.primaryColor.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.05)),
+                      decoration: BoxDecoration(
+                        color: isRead ? Colors.transparent : (isDark ? AppTheme.primaryColor.withOpacity(0.1) : AppTheme.primaryColor.withOpacity(0.05)),
+                        border: Border(bottom: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100, width: 1)),
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Icon or Image
                           Container(
                             width: 50, height: 50,
                             decoration: BoxDecoration(
@@ -191,7 +233,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               : Icon(Icons.notifications_active_rounded, color: isRead ? Colors.grey : AppTheme.primaryColor, size: 24),
                           ),
                           const SizedBox(width: 16),
-                          // Content
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,26 +240,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        notif['title'] ?? 'Notification',
-                                        style: TextStyle(fontWeight: isRead ? FontWeight.w600 : FontWeight.w800, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-                                      ),
-                                    ),
-                                    if (!isRead)
-                                      Container(width: 8, height: 8, margin: const EdgeInsets.only(left: 8), decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
+                                    Expanded(child: Text(notif['title'] ?? 'Notification', style: TextStyle(fontWeight: isRead ? FontWeight.w600 : FontWeight.w800, fontSize: 15, color: isDark ? Colors.white : Colors.black87))),
+                                    if (!isRead) Container(width: 8, height: 8, margin: const EdgeInsets.only(left: 8), decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  notif['message'] ?? '',
-                                  style: TextStyle(color: isRead ? Colors.grey.shade500 : (isDark ? Colors.grey.shade300 : Colors.black54), fontSize: 14, height: 1.4),
-                                ),
+                                Text(notif['message'] ?? '', style: TextStyle(color: isRead ? Colors.grey.shade500 : (isDark ? Colors.grey.shade300 : Colors.black54), fontSize: 14, height: 1.4)),
                                 const SizedBox(height: 8),
-                                Text(
-                                  _formatTime(notif['created_at']?.toString() ?? ''),
-                                  style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
+                                Text(_formatTime(notif['created_at']?.toString() ?? ''), style: const TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
