@@ -125,8 +125,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           id: courseId, 
           title: notif['course_title']?.toString() ?? notif['title'] ?? 'Course', 
           slug: notif['course_slug']?.toString() ?? '', 
-          thumbnailUrl: notif['image_url']?.toString() ?? '', 
-          price: 0, discountPrice: 0, isFree: true, instructorName: 'Loading...', 
+          thumbnailUrl: notif['course_thumbnail']?.toString() ?? notif['image_url']?.toString() ?? '', 
+          price: double.tryParse(notif['course_price']?.toString() ?? '0') ?? 0.0, discountPrice: double.tryParse(notif['course_discount_price']?.toString() ?? '0') ?? 0.0, isFree: notif['course_is_free']?.toString() == '1', instructorName: 'Loading...', 
           categoryName: 'Course', language: 'EN', type: 'courses', productType: 'digital'
         ); 
         Navigator.push(context, MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: dummy)));
