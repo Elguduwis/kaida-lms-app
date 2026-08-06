@@ -24,6 +24,15 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(':app')
+    
+    // Force all Flutter plugins to compile against SDK 36
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdkVersion 36
+            }
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
