@@ -18,7 +18,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
   late TabController _tabController;
   bool _isLoading = true;
   String _searchQuery = '';
-  
+
   Map<String, List<dynamic>> _faqs = {};
   Map<String, String> _contactInfo = {};
 
@@ -62,7 +62,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
     if (_searchQuery.isEmpty) return _faqs;
     Map<String, List<dynamic>> filtered = {};
     final query = _searchQuery.toLowerCase();
-    
+
     _faqs.forEach((category, questions) {
       final matches = questions.where((q) {
         final qText = _stripHtml(q['question']?.toString() ?? '').toLowerCase();
@@ -92,7 +92,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : Colors.white,
       appBar: AppBar(
@@ -114,7 +114,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
           tabs: const [Tab(text: 'FAQ'), Tab(text: 'Contact Us')],
         ),
       ),
-      body: _isLoading 
+      body: _isLoading
           ? const Center(child: KaidaLoader())
           : TabBarView(
               controller: _tabController,
@@ -187,7 +187,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
         boxShadow: [if (!isDark) BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
       ),
       child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent), 
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           iconColor: AppTheme.primaryColor,
           collapsedIconColor: isDark ? Colors.white : Colors.grey.shade600,
@@ -210,12 +210,12 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 10), 
+          const SizedBox(height: 10),
           Text('How can we help you?', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
           const SizedBox(height: 8),
           Text(
-            'It looks like you are experiencing problems with our platform. We are here to help so please get in touch with us.', 
-            textAlign: TextAlign.center, 
+            'It looks like you are experiencing problems with our platform. We are here to help so please get in touch with us.',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 15, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, height: 1.5)
           ),
           const SizedBox(height: 40),
@@ -223,7 +223,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
           _buildContactCard(
             title: 'Email Us',
             subtitle: _contactInfo['email'] ?? 'support@kainuwa.africa',
-            icon: Icons.email_rounded,
+            iconWidget: Icon(Icons.email_rounded, color: AppTheme.primaryColor, size: 24),
             iconColor: AppTheme.primaryColor,
             isDark: isDark,
             onTap: () => _launchUrl(_contactInfo['email'] ?? '', isEmail: true),
@@ -233,7 +233,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
             _buildContactCard(
               title: 'Facebook',
               subtitle: 'Follow our page',
-              icon: FontAwesomeIcons.facebook,
+              iconWidget: FaIcon(FontAwesomeIcons.facebook, color: AppTheme.primaryColor, size: 24),
               iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['facebook']!),
@@ -243,7 +243,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
             _buildContactCard(
               title: 'X (Twitter)',
               subtitle: 'Send us a direct message',
-              icon: FontAwesomeIcons.xTwitter,
+              iconWidget: FaIcon(FontAwesomeIcons.xTwitter, color: AppTheme.primaryColor, size: 24),
               iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['twitter']!),
@@ -253,7 +253,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
             _buildContactCard(
               title: 'Instagram',
               subtitle: 'See our latest updates',
-              icon: FontAwesomeIcons.instagram,
+              iconWidget: FaIcon(FontAwesomeIcons.instagram, color: AppTheme.primaryColor, size: 24),
               iconColor: AppTheme.primaryColor,
               isDark: isDark,
               onTap: () => _launchUrl(_contactInfo['instagram']!),
@@ -263,7 +263,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildContactCard({required String title, required String subtitle, required IconData icon, required Color iconColor, required bool isDark, required VoidCallback onTap}) {
+  Widget _buildContactCard({required String title, required String subtitle, required Widget iconWidget, required Color iconColor, required bool isDark, required VoidCallback onTap}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -277,7 +277,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> with SingleTickerPr
         leading: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(color: iconColor.withOpacity(0.1), shape: BoxShape.circle),
-          child: FaIcon(icon, color: iconColor, size: 24),
+          child: iconWidget,
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
