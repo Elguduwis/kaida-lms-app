@@ -22,17 +22,33 @@ rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// 1. Force SDK 36 on all plugins BEFORE evaluating the app
 subprojects {
-    project.evaluationDependsOn(':app')
-    
-    // Force all Flutter plugins to compile against SDK 36
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
                 compileSdkVersion 36
+                
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        
+        // Ensure Kotlin tasks match the Java 17 target
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = JavaVersion.VERSION_17.toString()
             }
         }
     }
+}
+
+// 2. Evaluate the app AFTER the overrides are set
+subprojects {
+    project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {
