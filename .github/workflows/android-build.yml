@@ -35,21 +35,23 @@ jobs:
         cache: true
         cache-key: 'flutter-:os:-:channel:-:version:-:arch:-:hash:'
 
-    # 1. RE-ENABLED: Generate the missing Android scaffolding
     - name: Generate Native Android Scaffolding
       run: flutter create --platforms=android --org com.kainuwa .
 
-    # 2. Force the package name to match Firebase exactly
     - name: Fix Package Name for Firebase
       run: |
         sed -i 's/namespace "com.kainuwa.kainuwa_academy"/namespace "com.kainuwa.academy"/g' android/app/build.gradle
         sed -i 's/applicationId "com.kainuwa.kainuwa_academy"/applicationId "com.kainuwa.academy"/g' android/app/build.gradle
 
-    # 3. Inject Google Services, Firebase plugins, and App Info
-    - name: Activate Google Services & Permissions
+    - name: Activate Google Services & Strip Unused Permissions
       run: |
         sed -i '/dependencies {/a \        classpath "com.google.gms:google-services:4.4.0"' android/build.gradle
         sed -i '/apply plugin: "com.android.application"/a apply plugin: "com.google.gms.google-services"' android/app/build.gradle
+        
+        # Add tools namespace and force remove the media playback permission
+        sed -i 's/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android"/<manifest xmlns:android="http:\/\/schemas.android.com\/apk\/res\/android" xmlns:tools="http:\/\/schemas.android.com\/tools"/g' android/app/src/main/AndroidManifest.xml
+        sed -i '/<application/i \    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:node="remove" />' android/app/src/main/AndroidManifest.xml
+        
         sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
         sed -i 's/android:label="kainuwa_academy"/android:label="Kainuwa Academy"/g' android/app/src/main/AndroidManifest.xml
 
